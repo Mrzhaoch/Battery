@@ -1,27 +1,45 @@
-# BatteryHub
+# Battery
 
-*Formerly **Wireless Battery**. Version 1.1.0 renamed the app; an update keeps your settings, startup choice and battery history.*
-
-[![Support me on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20me-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/krisgfx)
-[![Donate with PayPal](https://img.shields.io/badge/PayPal-Donate-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/krisgfx)
-[![GitHub Sponsors](https://img.shields.io/badge/GitHub-Sponsor-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/krisgfx9)
-[![Join our Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/ZgDDUPP8ye)
-[![Star on GitHub](https://img.shields.io/github/stars/krisgfx9/Wireless-Device-Battery-Monitor?style=flat&logo=github&label=Star)](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
-[![Share on Reddit](https://img.shields.io/badge/Reddit-Share-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/submit?url=https%3A%2F%2Fgithub.com%2Fkrisgfx9%2FWireless-Device-Battery-Monitor&title=Wireless%20Battery%3A%20battery%20levels%20of%20your%20wireless%20devices%20on%20the%20Windows%20taskbar)
-[![Report a device](https://img.shields.io/badge/Report-a%20device-2EA44F?logo=github&logoColor=white)](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/issues/new)
-[![Help translate](https://img.shields.io/badge/Help-translate-6F42C1?logo=googletranslate&logoColor=white)](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/pull/129)
-
-Battery levels of your wireless mouse, headset, keyboard and controller, right on the Windows taskbar.
+**A lean fork of [BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)** (formerly
+*Wireless Battery*): battery levels of your wireless mouse, headset, keyboard and controller on the
+Windows taskbar, plus optional CPU / GPU / RAM readings, with as little running in the background as
+possible.
 
 ![BatteryHub on the taskbar](docs/screenshot.png)
 
-> **Just want it working?** Download **[BatteryHub-Setup](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest)** from the latest release, run it and click through. That's it.
+> **This is not my app.** BatteryHub was created and is maintained by
+> **[KrisGFX](https://github.com/krisgfx9)** (Kristijan Bimbiloski) with more than 130 contributors.
+> Almost everything here is their work: the ~90 device drivers and the protocol research behind them,
+> the taskbar widget, alerts, translations, the installer and the signed updater. This fork only
+> trims a few things and adds a few others (listed below). The app still calls itself BatteryHub.
 >
-> **Experienced users** can grab the portable zip, use the [command-line options](#command-line), or [build it from source](#build) with `make` or `build.bat`.
->
-> **Like it?** BatteryHub is free and open source. If it saves you a trip into vendor software, you can support it on [Ko-fi](https://ko-fi.com/krisgfx), [PayPal](https://www.paypal.com/paypalme/krisgfx) or [GitHub Sponsors](https://github.com/sponsors/krisgfx9). It helps me keep my apps free alongside my studies. Not able to donate? A ⭐ star, sharing it, or reporting an unsupported device with a `--dump` helps just as much.
+> If it is useful to you, please support the original:
+> [⭐ star BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor),
+> [Ko-fi](https://ko-fi.com/krisgfx), [PayPal](https://www.paypal.com/paypalme/krisgfx) or
+> [GitHub Sponsors](https://github.com/sponsors/krisgfx9). Most people should simply use
+> [BatteryHub itself](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest).
 
-- **Tiny**: a ~350 KB app using about 2 MB of RAM. It's plain C++/Win32, with no runtime and no background service, and installs in seconds without admin rights.
+## What this fork changes
+
+Compared with BatteryHub 1.1.0 (the fork follows upstream and merges its updates):
+
+| | Change |
+|---|---|
+| **Added** | **Hardware readings** after the batteries: `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`. No driver, no admin rights, no CPU temperature ([details](#display)). The idea comes from [TraySense](https://github.com/DMTWEAKS/TraySense) by DMTWEAKS; no code was taken from it. |
+| **Added** | **Off means not read.** *Read batteries from* switches off Bluetooth, Phone Link, Xbox controllers or HeadsetControl entirely; a hidden device is no longer opened at all; the Bluetooth broadcast listener stops when nothing needs it. |
+| **Removed** | **Battery history** (history window, recording to disk and the time-to-empty estimate), to keep the app small. |
+| **Changed** | **No charging bolt** on the taskbar; charging still shows in the tooltip and the tray icon, and a green ✓ still marks a full battery. |
+| **Changed** | **Updates come only from this repository**, are checked once a day, and are only installed when signed with this fork's own release key. BatteryHub's key is not built in, so an official BatteryHub update never replaces this fork, and vice versa. |
+
+Everything else (devices, display options, alerts, languages, command line) is BatteryHub's and
+documented below as in the original.
+
+**Devices:** support for new devices belongs in BatteryHub, so every user gets it. Please report
+unsupported devices there with a `--dump`
+([open an issue](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/issues/new)); issues
+here are only for what this fork changes.
+
+- **Small**: plain C++/Win32, no runtime and no background service, installs without admin rights.
 - **No vendor software needed**: it talks to the devices directly. G HUB, Synapse, iCUE, GG and NGenuity can stay closed (or keep running; they don't conflict).
 - **Many brands**: Logitech, Razer, SteelSeries, Corsair, HyperX, Glorious, Jabra, JBL, PlayStation and Xbox controllers, Samsung Galaxy Buds, any Bluetooth device Windows knows a battery level for, and every headset the bundled [HeadsetControl](https://github.com/Sapd/HeadsetControl) supports.
 
@@ -43,6 +61,27 @@ Battery levels of your wireless mouse, headset, keyboard and controller, right o
   Xbox, Samsung, Apple, Jabra, JBL, Cooler Master and Steam. Each color has a dark- and a light-taskbar shade. The brand
   comes from the driver that found the device, then the vendor ID, then the name; colors and rules are in
   `src/brands.cpp`. Turn it off with *Brand colors* in the menu.
+- **Hardware readings (this fork):** after the batteries, `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`,
+  refreshed every 2 seconds. *Hardware on the taskbar* in the menu switches each one on or off (all on by default);
+  the tooltip lists them by name. A temperature turns orange, then red, from 80 / 90 °C for the GPU and 65 / 75 °C
+  for the SSD. Readings come from Windows performance counters, DXGI, the graphics driver (D3DKMT, with NVIDIA's
+  `nvml.dll` as a fallback) and the storage temperature query on the drive that holds Windows: no driver, no admin
+  rights, nothing downloaded. A reading the PC does not provide is left out. There is no CPU temperature, because
+  Windows only exposes it through a kernel driver. Taskbar widget only; nothing is read in tray-icon mode. Idea
+  from [TraySense](https://github.com/DMTWEAKS/TraySense); no code was taken from it.
+- **Off means not read (this fork):** everything you can switch off stops being read, not just hidden:
+  - *Hardware on the taskbar*: each reading's source closes when it is off; GPU and VRAM usage (the costliest,
+    they load `pdh.dll`) unload it when both are off.
+  - *Read batteries from*: *Bluetooth devices and earbuds* (Windows' Bluetooth levels, AirPods / Fast Pair /
+    Galaxy Buds / Nothing Ear, GameSir over Bluetooth, and every Bluetooth HID device), *Phone (Microsoft Phone
+    Link)*, *Xbox controllers*, and *HeadsetControl (more headsets)*, which otherwise runs `headsetcontrol.exe`
+    about once a minute. The Bluetooth broadcast listener also stops by itself as soon as no AirPods or Bluetooth
+    headset needs it.
+  - A device switched off with *Show on the taskbar* is no longer opened at all; the menu lists it as *not read
+    while hidden*. Exception: when it shares a receiver with a device that is still shown (two devices on one
+    Logitech receiver), the receiver is still read.
+- **No battery history (this fork):** the original's history window, recording and time-to-empty estimate
+  were removed to keep the app small. Nothing is recorded to disk.
 
 **Tray icons:** one icon per device with the number drawn in it, plus a "Low battery" notification at 15%. The app switches to this automatically when the taskbar is vertical or can't be found.
 
@@ -76,15 +115,6 @@ needs a notification-area icon to display a legacy balloon, widget mode may
 show a temporary notification icon for up to one minute after an alert.
 Widget colours and the low-battery highlight still use the project's
 original global 15% threshold, independently of the notification setting.
-
-## Battery history & insights
-
-Right-click a device in the taskbar widget or tray menu and choose **Battery history...**.
-The native, DPI-aware viewer (it follows the Windows light/dark theme) shows recorded battery levels with connected sample lines over the last **24 hours**, **7 days**, or **30 days**, along with the latest reading, lowest/highest level, change in percentage points, and sample count. You can clear the selected device's history from the viewer.
-
-History is recorded **locally only** for connected, awake devices reporting a numeric percentage. Readings are sampled at most once every 30 minutes per device (except charging-state transitions, with a 60-second minimum). Data is kept for up to 30 days and the local file is kept under about 2 MB. The app never probes hardware beyond its existing polling, sends no history data over the network, and makes a conservative, approximate time-to-empty estimate from recent discharge observations only. At least four points, two hours, a three-percentage-point decline, a fresh reading and a stable discharge segment are required. Charging, old readings or insufficient data suppress the estimate; device-reported runtime is not available. The estimate is not a guarantee. Missing chart data is shown as gaps, not interpolated.
-
-Turn off **Record battery history** in the menu to stop saving readings; what was already saved stays until you clear it in the viewer. The file is stored in `%LOCALAPPDATA%\WirelessBattery\battery_history.tsv`. Its device identities are encoded (not encrypted); the file is local to your Windows account. In `--demo`, the chart uses synthetic data that is never saved. **Note:** history starts collecting only after this feature is installed and the app has been running for a while.
 
 ## Supported devices
 
@@ -233,9 +263,11 @@ Also hardware-tested: RAWM Leviathan V4 (RAWM HS Receiver `1915:2346`; battery l
 
 ## Install
 
-[![Latest version](https://img.shields.io/github/v/release/krisgfx9/Wireless-Device-Battery-Monitor?label=latest%20version&style=for-the-badge)](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest)
+This fork has no published release yet: [build it from source](#build), or use
+[BatteryHub's releases](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest)
+(the original app, without this fork's changes). Once this fork publishes releases:
 
-1. Download **`BatteryHub-Setup-<version>.exe`** from the [latest release](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest).
+1. Download **`BatteryHub-Setup-<version>.exe`** from [this fork's latest release](https://github.com/ahizechi/Battery/releases/latest).
 2. Run it and click through. It needs **no administrator rights** and **nothing else installed**: no
    runtimes, no drivers, no vendor apps. HeadsetControl comes bundled.
 
@@ -250,8 +282,10 @@ anywhere and run `BatteryHub.exe`.
 
 ## Updates on Windows
 
-Official stable Windows builds check the project's latest published stable release in the
-background, 30 seconds after startup and then every 24 hours while the app is running. Open the
+This fork updates only from its own repository, `ahizechi/Battery`, and only trusts releases signed
+with its own key (the original project's key is not built in). Official stable Windows builds check
+the latest published stable release in the background, 30 seconds after startup and then once a
+day while the app is running; a failed check also waits a day. Open the
 menu to see **Update available: vX.Y.Z...**, or choose **Check for updates...** yourself.
 Update information appears only in this menu: battery icons, percentages and tooltips stay the
 same, and automatic checks never show a notification or dialog. Turn off
@@ -335,8 +369,8 @@ pushing a tag like `v1.0.0` publishes a release with the installer, the portable
 HeadsetControl source (as its GPL license requires).
 
 Windows builds also need PowerShell for generating the shared executable/resource version.
-The official repository's version tags build with `CHANNEL=stable`; local builds default to
-`dev`. Forks and pull requests do not enable official updates automatically.
+This repository's (`ahizechi/Battery`) version tags build with `CHANNEL=stable`; local builds
+default to `dev`. Other forks and pull requests do not enable official updates automatically.
 
 `BatteryHub.exe` on its own also works. Without `headsetcontrol.exe` next to it (or on `PATH`) you
 just lose the extra headsets.
@@ -414,13 +448,24 @@ Refresh now = Aggiorna ora
 ```
 
 - **Use your own language right away:** choose *Language → Add your own language...* in the menu. It opens `%APPDATA%\WirelessBattery\lang` with `_template.txt`, which lists every phrase. Copy it to e.g. `it.txt`, fill in `@code`, `@name` and the translations, and the language appears in the menu (no restart needed). A file there with the same `@code` as a built-in language replaces its phrases, so you can also fix a single word locally.
-- **Share it with everyone:** send the file as a pull request to [`lang/`](lang). The build includes every file in that folder automatically; no code change is needed.
+- **Share it with everyone:** send the file as a pull request to BatteryHub's [`lang/`](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/tree/main/lang) (this fork picks it up from there). The build includes every file in that folder automatically; no code change is needed.
 - Keep `{placeholders}` as they are, and add `@rtl = 1` for right-to-left scripts. Phrases left empty stay English, so a partial translation is fine.
 - The `--list` and `--dump` output stays English on purpose: it is pasted into GitHub issues.
 
 ## Credits
 
-App icon by [nik-txt](https://github.com/nik-txt) ([`res/app.svg`](res/app.svg)).
+- **[BatteryHub](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)** by
+  **[KrisGFX](https://github.com/krisgfx9)** and its
+  [contributors](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/graphs/contributors):
+  the app this fork is built on, nearly all of its code and documentation, and the device research
+  credited below. Support it on [Ko-fi](https://ko-fi.com/krisgfx),
+  [PayPal](https://www.paypal.com/paypalme/krisgfx) or [GitHub Sponsors](https://github.com/sponsors/krisgfx9).
+- **[TraySense](https://github.com/DMTWEAKS/TraySense)** by DMTWEAKS: the idea of showing hardware
+  usage and temperatures on the taskbar. This fork's hardware readings are written separately (TraySense
+  is AGPL-3.0); none of its code is used.
+- **[HeadsetControl](https://github.com/Sapd/HeadsetControl)** by Sapd and contributors (GPL-3.0),
+  bundled for extra headsets.
+- App icon by [nik-txt](https://github.com/nik-txt) ([`res/app.svg`](res/app.svg)).
 
 The protocols come from these projects' research:
 
@@ -496,6 +541,7 @@ The protocols come from these projects' research:
 
 ## License
 
-[GNU General Public License v3.0 or later](LICENSE). You may use, modify and redistribute this
-software, but anything you distribute that is based on it must be released under the same license,
-with its source code.
+[GNU General Public License v3.0 or later](LICENSE), the same as BatteryHub. You may use, modify and
+redistribute this software, but anything you distribute that is based on it must be released under
+the same license, with its source code. Copyright of BatteryHub's code stays with KrisGFX and its
+contributors; this fork's changes are offered under the same license.
