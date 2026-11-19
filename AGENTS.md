@@ -14,7 +14,9 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
   tooltip and tray colour still show charging, the full-charge check mark is kept), and hardware
   readings after the batteries (`src/hardware.*`, pure logic in `src/hardware_model.h` with
   `tests/hardware_model_test.cpp`; `WidgetItem::tag`/`warm`; menu *Hardware on the taskbar*,
-  registry `HardwareReadings` bitmask). No CPU temperature and no kernel driver, by Zek's choice
+  registry `HardwareReadings` bitmask, default 0; `HardwareRefreshSeconds` 1/2/5, default 5;
+  paused while the display is off via `GUID_CONSOLE_DISPLAY_STATE`). Defaults show only batteries;
+  HeadsetControl (`ReadHeadsetControl`) is off by default because it runs a program. No CPU temperature and no kernel driver, by Zek's choice
   (19 Nov 2026); TraySense (AGPL) inspired it but none of its code is used.
 - Zek's rule for this fork: minimal RAM, and anything switched off is not read at all. Sources:
   `PollOptions` (`devices.h`; registry `ReadBluetooth`, `ReadPhoneLink`, `ReadXInput`,

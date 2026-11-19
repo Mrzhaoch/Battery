@@ -62,6 +62,7 @@ Xbox controllers =
 HeadsetControl (more headsets) =
 not read while hidden =
 Hardware on the taskbar =
+Refresh every =
 CPU usage =
 GPU usage =
 GPU temperature =

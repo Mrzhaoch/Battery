@@ -38,7 +38,11 @@ constexpr UINT_PTR TIMER_DEBOUNCE = 1;
 constexpr UINT_PTR TIMER_WIDGET = 2;
 constexpr UINT_PTR TIMER_ALERT_ICON = 3;
 constexpr UINT_PTR TIMER_HARDWARE = 4;
-constexpr UINT HARDWARE_MS = 2000;  // how often the hardware readings refresh
+// "Refresh every" choices for the hardware readings, in seconds; the longest (cheapest) is the default.
+constexpr UINT HARDWARE_SECONDS[] = { 1, 2, 5 };
+constexpr UINT HARDWARE_DEFAULT_SECONDS = 5;
+// GUID_CONSOLE_DISPLAY_STATE (winnt.h), spelled out so no import library is needed for it.
+const GUID kDisplayStateGuid = { 0x6fe69556, 0x704a, 0x47a0, { 0x8f, 0x24, 0xc2, 0x8d, 0x93, 0x6f, 0xda, 0x47 } };
 // "Check battery every" choices in seconds; 60 is the default. A poll resets an awake device's sleep timer,
 // so a device only sleeps if its timer is shorter than the interval.
 constexpr DWORD POLL_SECONDS[] = { 30, 60, 120, 300, 600, 900, 1800, 3600 };
@@ -51,6 +55,7 @@ enum MenuId : UINT {
     ID_BRAND_COLORS, ID_STACKED, ID_SHOW_DISCONNECTED,
     ID_POLL_FIRST = 500,  // "Check battery every": ID_POLL_FIRST + 0..7
     ID_HARDWARE_FIRST = 600,  // "Hardware on the taskbar": ID_HARDWARE_FIRST + hardware::Metric
+    ID_HARDWARE_RATE_FIRST = 620,  // its "Refresh every": ID_HARDWARE_RATE_FIRST + index into HARDWARE_SECONDS
     ID_SOURCE_BLUETOOTH = 700, ID_SOURCE_PHONE_LINK, ID_SOURCE_XINPUT, ID_SOURCE_HEADSETCONTROL,  // "Read batteries from"
     ID_UPDATE = 200, ID_AUTO_UPDATE,
     ID_LANG_AUTO = 400, ID_LANG_ADD, ID_LANG_FIRST,  // "Language": ID_LANG_FIRST + 0..63
@@ -81,7 +86,9 @@ std::wstring g_widgetMonitor = L"all";  // which taskbars show the widget: "all"
 bool g_widgetBackground = false;  // draw a plate behind the taskbar text (transparent taskbar themes)
 bool g_stacked = false;      // icon above the percentage (menu option)
 bool g_brandColors = false;  // off by default; known brands get their color (Razer green, Logitech blue, ...)
-unsigned g_hardwareMask = hardware::kAllMetrics;  // hardware readings after the batteries (taskbar widget only)
+unsigned g_hardwareMask = 0;  // hardware readings after the batteries (taskbar widget only); off by default
+UINT g_hardwareSeconds = HARDWARE_DEFAULT_SECONDS;
+bool g_displayOn = true;  // hardware readings pause while the display is off (Windows tells us)
 hardware::Readings g_hardware;                     // latest values; -1 = not shown
 bool g_hardwareTimer = false;
 std::atomic<DWORD> g_pollIntervalMs{ 60 * 1000 };  // set from the menu, read by the worker thread
@@ -227,7 +234,7 @@ void SavePaused() {
 }
 
 // "Read batteries from" in the menu: a source that is off is never touched (see PollOptions).
-bool g_readBluetooth = true, g_readPhoneLink = true, g_readXInput = true, g_readHeadsetControl = true;
+bool g_readBluetooth = true, g_readPhoneLink = true, g_readXInput = true, g_readHeadsetControl = false;
 SRWLOCK g_optionsLock = SRWLOCK_INIT;
 PollOptions g_pollOptions;  // guarded by g_optionsLock; copied by the worker before every poll
 
@@ -339,10 +346,21 @@ bool LoadStacked() { return LoadBoolSetting(L"StackedLayout", false); }
 void SaveStacked(bool on) { SaveBoolSetting(L"StackedLayout", on); }
 bool LoadBrandColors() { return LoadBoolSetting(L"BrandColors", false); }
 void SaveBrandColors(bool on) { SaveBoolSetting(L"BrandColors", on); }
-unsigned LoadHardwareMask() {
-    DWORD v = hardware::kAllMetrics, sz = sizeof(v);
+unsigned LoadHardwareMask() {  // default: none, only batteries are shown
+    DWORD v = 0, sz = sizeof(v);
     RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"HardwareReadings", RRF_RT_REG_DWORD, nullptr, &v, &sz);
     return v & hardware::kAllMetrics;
+}
+UINT LoadHardwareSeconds() {
+    DWORD v = HARDWARE_DEFAULT_SECONDS, sz = sizeof(v);
+    RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"HardwareRefreshSeconds", RRF_RT_REG_DWORD, nullptr, &v, &sz);
+    for (UINT s : HARDWARE_SECONDS)
+        if (s == v) return s;
+    return HARDWARE_DEFAULT_SECONDS;
+}
+void SaveHardwareSeconds(UINT seconds) {
+    DWORD v = seconds;
+    RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"HardwareRefreshSeconds", REG_DWORD, &v, sizeof(v));
 }
 void SaveHardwareMask(unsigned mask) {
     DWORD v = mask;
@@ -794,18 +812,26 @@ void OnResults(std::vector<DeviceStatus>& results) {
     UpdateWidget();
 }
 
-// Reads hardware only while the taskbar widget is showing and at least one reading is switched on.
+// Reads hardware only while the taskbar widget is showing and at least one reading is switched on,
+// and samples only while the display is on (the sources stay open while it is off, nothing is read).
 void ApplyHardware() {
     bool active = g_useWidget && g_hardwareMask != 0;
     hardware::Configure(active ? g_hardwareMask : 0);
-    if (active && !g_hardwareTimer) {  // values appear on the first tick, HARDWARE_MS from now
-        SetTimer(g_hwnd, TIMER_HARDWARE, HARDWARE_MS, nullptr);
+    bool sampling = active && g_displayOn;
+    if (sampling && !g_hardwareTimer) {  // values appear on the first tick, g_hardwareSeconds from now
+        SetTimer(g_hwnd, TIMER_HARDWARE, g_hardwareSeconds * 1000, nullptr);
         g_hardwareTimer = true;
-    } else if (!active && g_hardwareTimer) {
+    } else if (!sampling && g_hardwareTimer) {
         KillTimer(g_hwnd, TIMER_HARDWARE);
         g_hardwareTimer = false;
-        g_hardware = hardware::Readings{};
     }
+    if (!active) g_hardware = hardware::Readings{};
+}
+
+void SetHardwareSeconds(UINT seconds) {
+    g_hardwareSeconds = seconds;
+    SaveHardwareSeconds(seconds);
+    if (g_hardwareTimer) SetTimer(g_hwnd, TIMER_HARDWARE, seconds * 1000, nullptr);  // replaces the old interval
 }
 
 void ToggleHardwareMetric(hardware::Metric m) {
@@ -1076,6 +1102,16 @@ void ShowMenu() {
         for (hardware::Metric hm : kHardwareOrder)
             AppendMenuW(sub, MF_STRING | ((g_hardwareMask & hardware::Bit(hm)) ? MF_CHECKED : 0) | (g_wantWidget ? 0 : MF_GRAYED),
                         ID_HARDWARE_FIRST + hm, HardwareName(hm));
+        AppendMenuW(sub, MF_SEPARATOR, 0, nullptr);
+        HMENU rate = CreatePopupMenu();
+        const UINT rates = ARRAYSIZE(HARDWARE_SECONDS);
+        for (UINT i = 0; i < rates; i++) {
+            AppendMenuW(rate, MF_STRING, ID_HARDWARE_RATE_FIRST + i,
+                        TF(L"{seconds} s", { { L"seconds", std::to_wstring(HARDWARE_SECONDS[i]) } }).c_str());
+            if (HARDWARE_SECONDS[i] == g_hardwareSeconds)
+                CheckMenuRadioItem(rate, ID_HARDWARE_RATE_FIRST, ID_HARDWARE_RATE_FIRST + rates - 1, ID_HARDWARE_RATE_FIRST + i, MF_BYCOMMAND);
+        }
+        AppendMenuW(sub, MF_POPUP | (g_wantWidget && g_hardwareMask ? 0 : MF_GRAYED), (UINT_PTR)rate, T(L"Refresh every"));
         AppendMenuW(m, MF_POPUP | (g_wantWidget ? 0 : MF_GRAYED), (UINT_PTR)sub, T(L"Hardware on the taskbar"));
     }
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -1157,6 +1193,8 @@ void ShowMenu() {
                 SetPollSeconds(POLL_SECONDS[cmd - ID_POLL_FIRST]);
             } else if (cmd >= ID_HARDWARE_FIRST && cmd < ID_HARDWARE_FIRST + hardware::MetricCount) {
                 ToggleHardwareMetric(static_cast<hardware::Metric>(cmd - ID_HARDWARE_FIRST));
+            } else if (cmd >= ID_HARDWARE_RATE_FIRST && cmd < ID_HARDWARE_RATE_FIRST + ARRAYSIZE(HARDWARE_SECONDS)) {
+                SetHardwareSeconds(HARDWARE_SECONDS[cmd - ID_HARDWARE_RATE_FIRST]);
             } else if (cmd >= ID_LANG_FIRST && cmd < ID_LANG_FIRST + languages.size()) {
                 SetLanguage(languages[cmd - ID_LANG_FIRST].code);
             } else if (cmd >= ID_MONITOR_FIRST && cmd < ID_MONITOR_FIRST + monitors.size()) {
@@ -1280,6 +1318,14 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return TRUE;
         case WM_POWERBROADCAST:
             if (wp == PBT_APMRESUMEAUTOMATIC) RefreshSoon(5000);
+            if (wp == PBT_POWERSETTINGCHANGE && lp) {
+                auto* s = reinterpret_cast<const POWERBROADCAST_SETTING*>(lp);
+                if (IsEqualGUID(s->PowerSetting, kDisplayStateGuid) && s->DataLength >= sizeof(DWORD)) {
+                    DWORD state = *reinterpret_cast<const DWORD*>(s->Data);  // 0 off, 1 on, 2 dimmed
+                    g_displayOn = state != 0;
+                    ApplyHardware();
+                }
+            }
             return TRUE;
         case WM_TIMER:
             if (wp == TIMER_DEBOUNCE) { KillTimer(h, TIMER_DEBOUNCE); SetEvent(g_refreshEvt); }
@@ -1463,6 +1509,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
     filter.dbcc_classguid = GUID_DEVINTERFACE_HID;
     HDEVNOTIFY notify = RegisterDeviceNotificationW(g_hwnd, &filter, DEVICE_NOTIFY_WINDOW_HANDLE);
+    // Display on / off, so the hardware readings pause while nobody can see them.
+    HPOWERNOTIFY displayNotify = RegisterPowerSettingNotification(g_hwnd, &kDisplayStateGuid, DEVICE_NOTIFY_WINDOW_HANDLE);
 
     g_refreshEvt = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     g_stopEvt = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -1473,6 +1521,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     g_brandColors = LoadBrandColors();
     g_stacked = LoadStacked();
     g_hardwareMask = LoadHardwareMask();
+    g_hardwareSeconds = LoadHardwareSeconds();
     g_pollIntervalMs = LoadPollSeconds() * 1000;
     widget::SetStacked(g_stacked);
     widget::SetBackground(g_widgetBackground);  // remembered by the widget across re-creation
@@ -1492,7 +1541,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     g_readBluetooth = LoadBoolSetting(L"ReadBluetooth", true);
     g_readPhoneLink = LoadBoolSetting(L"ReadPhoneLink", true);
     g_readXInput = LoadBoolSetting(L"ReadXInput", true);
-    g_readHeadsetControl = LoadBoolSetting(L"ReadHeadsetControl", true);
+    g_readHeadsetControl = LoadBoolSetting(L"ReadHeadsetControl", false);  // off by default: runs a program
     UpdatePollOptions();  // before the worker's first poll
     LoadOrder();
     LoadAliases();
@@ -1511,6 +1560,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     // drain results posted after shutdown started
     while (PeekMessageW(&m, nullptr, WM_RESULTS, WM_RESULTS, PM_REMOVE)) delete reinterpret_cast<std::vector<DeviceStatus>*>(m.lParam);
     if (notify) UnregisterDeviceNotification(notify);
+    if (displayNotify) UnregisterPowerSettingNotification(displayNotify);
     if (g_worker) CloseHandle(g_worker);
     ReleaseMutex(mutex);
     return 0;

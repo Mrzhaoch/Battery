@@ -25,7 +25,7 @@ Compared with BatteryHub 1.1.0 (the fork follows upstream and merges its updates
 
 | | Change |
 |---|---|
-| **Added** | **Hardware readings** after the batteries: `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`. No driver, no admin rights, no CPU temperature ([details](#display)). The idea comes from [TraySense](https://github.com/DMTWEAKS/TraySense) by DMTWEAKS; no code was taken from it. |
+| **Added** | **Hardware readings** after the batteries, off until you switch them on: `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`. No driver, no admin rights, no CPU temperature, nothing read while the display is off ([details](#display)). The idea comes from [TraySense](https://github.com/DMTWEAKS/TraySense) by DMTWEAKS; no code was taken from it. |
 | **Added** | **Off means not read.** *Read batteries from* switches off Bluetooth, Phone Link, Xbox controllers or HeadsetControl entirely; a hidden device is no longer opened at all; the Bluetooth broadcast listener stops when nothing needs it. |
 | **Removed** | **Battery history** (history window, recording to disk and the time-to-empty estimate), to keep the app small. |
 | **Changed** | **No charging bolt** on the taskbar; charging still shows in the tooltip and the tray icon, and a green ✓ still marks a full battery. |
@@ -61,9 +61,9 @@ here are only for what this fork changes.
   Xbox, Samsung, Apple, Jabra, JBL, Cooler Master and Steam. Each color has a dark- and a light-taskbar shade. The brand
   comes from the driver that found the device, then the vendor ID, then the name; colors and rules are in
   `src/brands.cpp`. Turn it off with *Brand colors* in the menu.
-- **Hardware readings (this fork):** after the batteries, `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`,
-  refreshed every 2 seconds. *Hardware on the taskbar* in the menu switches each one on or off (all on by default);
-  the tooltip lists them by name. A temperature turns orange, then red, from 80 / 90 °C for the GPU and 65 / 75 °C
+- **Hardware readings (this fork, off by default):** after the batteries, `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`.
+  *Hardware on the taskbar* in the menu switches each one on; *Refresh every* picks 1, 2 or 5 seconds (5 by
+  default, the cheapest). Nothing is sampled while the display is off. The tooltip lists them by name. A temperature turns orange, then red, from 80 / 90 °C for the GPU and 65 / 75 °C
   for the SSD. Readings come from Windows performance counters, DXGI, the graphics driver (D3DKMT, with NVIDIA's
   `nvml.dll` as a fallback) and the storage temperature query on the drive that holds Windows: no driver, no admin
   rights, nothing downloaded. A reading the PC does not provide is left out. There is no CPU temperature, because
@@ -74,8 +74,9 @@ here are only for what this fork changes.
     they load `pdh.dll`) unload it when both are off.
   - *Read batteries from*: *Bluetooth devices and earbuds* (Windows' Bluetooth levels, AirPods / Fast Pair /
     Galaxy Buds / Nothing Ear, GameSir over Bluetooth, and every Bluetooth HID device), *Phone (Microsoft Phone
-    Link)*, *Xbox controllers*, and *HeadsetControl (more headsets)*, which otherwise runs `headsetcontrol.exe`
-    about once a minute. The Bluetooth broadcast listener also stops by itself as soon as no AirPods or Bluetooth
+    Link)*, *Xbox controllers*, and *HeadsetControl (more headsets)*. HeadsetControl is **off by default** in
+    this fork, because it runs `headsetcontrol.exe` about once a minute; switch it on if a headset only shows
+    up through it. The Bluetooth broadcast listener also stops by itself as soon as no AirPods or Bluetooth
     headset needs it.
   - A device switched off with *Show on the taskbar* is no longer opened at all; the menu lists it as *not read
     while hidden*. Exception: when it shares a receiver with a device that is still shown (two devices on one
