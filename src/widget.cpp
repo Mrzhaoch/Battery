@@ -257,16 +257,36 @@ wchar_t Glyph(DeviceKind k, bool bluetooth) {
 }
 constexpr wchar_t kBatteryUnknown = 0xE996;  // shown when there is nothing to display
 
-// Zek's fork: a charging (or full, on power) device gets a small horizontal battery after its number, filled
-// to its level like the battery in the iOS / macOS status bar, instead of upstream's lightning bolt / check
-// mark. Windows' icon font has it in 11 steps: Battery0 E850 ... Battery9 E859, Battery10 E83F.
+// Creates a font, falling back when the preferred face is not installed (GDI would silently substitute).
+HFONT MakeFont(int px, int weight, const wchar_t* face, const wchar_t* fallback, int fallbackPx = 0);
+
+// Zek's fork: a charging (or full, on power) device gets a small upright battery after its number, filled to
+// its level, instead of upstream's lightning bolt / check mark. Windows 11's Segoe Fluent Icons has it in 11
+// steps, VerticalBattery0 F5F2 ... VerticalBattery10 F5FC. Windows 10's Segoe MDL2 Assets has no upright set,
+// so there the horizontal one is used: Battery0 E850 ... Battery9 E859, Battery10 E83F.
+bool HasFluentIcons() {
+    static int has = -1;
+    if (has < 0) {
+        HFONT f = MakeFont(16, FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
+        HDC dc = CreateCompatibleDC(nullptr);
+        HGDIOBJ o = SelectObject(dc, f);
+        wchar_t got[LF_FACESIZE] = {};
+        GetTextFaceW(dc, LF_FACESIZE, got);
+        SelectObject(dc, o);
+        DeleteDC(dc);
+        DeleteObject(f);
+        has = !_wcsicmp(got, L"Segoe Fluent Icons") ? 1 : 0;
+    }
+    return has == 1;
+}
+
 wchar_t BatteryGlyph(int pct) {
     int step = pct < 0 ? 10 : std::clamp((pct + 5) / 10, 0, 10);
+    if (HasFluentIcons()) return (wchar_t)(0xF5F2 + step);
     return step == 10 ? (wchar_t)0xE83F : (wchar_t)(0xE850 + step);
 }
 
-// Creates a font, falling back when the preferred face is not installed (GDI would silently substitute).
-HFONT MakeFont(int px, int weight, const wchar_t* face, const wchar_t* fallback, int fallbackPx = 0) {
+HFONT MakeFont(int px, int weight, const wchar_t* face, const wchar_t* fallback, int fallbackPx) {
     for (const wchar_t* f : { face, fallback }) {
         int h_px = (f == fallback && fallbackPx > 0) ? fallbackPx : px;
         HFONT h = CreateFontW(-h_px, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -411,7 +431,7 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     Rgb orange = g_light ? Rgb{ 188, 75, 0 } : Rgb{ 255, 160, 70 };  // hardware temperature warning
     HFONT tagFont = MakeFont(Px(10), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // "CPU", "GPU", ...
     HFONT icons = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
-    HFONT bolt = MakeFont(Px(15), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");  // the battery symbol
+    HFONT bolt = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");  // the battery symbol
     HFONT text = MakeFont(Px(13), FW_NORMAL, L"Segoe UI Variable Text", L"Segoe UI", Px(12));
     HFONT caption = MakeFont(std::max(8, Px(7)), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // never under 8 px
 

@@ -10,7 +10,8 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 
 - Remote `upstream` = the original (push disabled). Sync by merging `upstream/main` into an
   `ai/` branch; never rewrite upstream history.
-- Fork-only changes: charging / full shows as a green level-filled battery glyph, not upstream's
+- Fork-only changes: charging / full shows as a green level-filled upright battery glyph (Segoe
+  Fluent F5F2-F5FC; horizontal E850 set on Windows 10), not upstream's
   bolt / check (`src/widget.cpp` `BatteryGlyph`, menu *Show charging*, registry `ShowCharging`;
   WLMouse Beast MAX cable `36A7:A881` added, cables share their receiver's key), and hardware
   readings after the batteries (`src/hardware.*`, pure logic in `src/hardware_model.h` with

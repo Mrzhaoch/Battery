@@ -28,7 +28,7 @@ Compared with BatteryHub 1.1.0 (the fork follows upstream and merges its updates
 | **Added** | **Hardware readings** after the batteries, off until you switch them on: `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`. No driver, no admin rights, no CPU temperature, nothing read while the display is off ([details](#display)). The idea comes from [TraySense](https://github.com/DMTWEAKS/TraySense) by DMTWEAKS; no code was taken from it. |
 | **Added** | **Off means not read.** *Read batteries from* switches off Bluetooth, Phone Link, Xbox controllers or HeadsetControl entirely; a hidden device is no longer opened at all; the Bluetooth broadcast listener stops when nothing needs it. |
 | **Removed** | **Battery history** (history window, recording to disk and the time-to-empty estimate), to keep the app small. |
-| **Changed** | **Charging shows as a clean battery symbol** (green, filled to the level, like iOS / macOS) instead of a lightning bolt, and a full battery on power shows it full. *Show charging* in the menu turns it off. |
+| **Changed** | **Charging shows as a clean battery symbol** (an upright green battery filled to the level) instead of a lightning bolt, and a full battery on power shows it full. *Show charging* in the menu turns it off. |
 | **Changed** | **Updates come only from this repository**, are checked once a day, and are only installed when signed with this fork's own release key. BatteryHub's key is not built in, so an official BatteryHub update never replaces this fork, and vice versa. |
 
 Everything else (devices, display options, alerts, languages, command line) is BatteryHub's and
@@ -47,7 +47,7 @@ here are only for what this fork changes.
 
 **On the taskbar (default):** `🎧 30%  🖱 93%` next to the notification area, drawn with the Windows icon font.
 - **Low battery:** a red number means 15% or less.
-- **Charging:** a small green battery symbol, filled to the current level, appears after the number while a device charges, and shows full once it is fully charged and still on power (this fork's replacement for BatteryHub's ⚡ and ✓). *Show charging (battery symbol)* in the menu turns it, and the tray icon's blue charging bar, off; the hover tooltip still says "charging".
+- **Charging:** a small upright green battery, filled to the current level, appears after the number while a device charges (on Windows 10, whose icon font has no upright battery, it lies on its side), and shows full once it is fully charged and still on power (this fork's replacement for BatteryHub's ⚡ and ✓). *Show charging (battery symbol)* in the menu turns it, and the tray icon's blue charging bar, off; the hover tooltip still says "charging".
 - **Asleep:** dimmed text means the device is asleep and the last known value is shown.
 - **Disconnected (optional):** turn on *Show disconnected devices* to display a dimmed `×` for devices whose driver explicitly reports an offline wireless link. This does not infer disconnection from a missed battery poll; the default remains to hide offline devices.
 - **Two devices of one kind:** with two mice (or two controllers...) both would get the same icon, so each one gets a tiny caption of up to 3 letters in the corner of its icon, taken from its name (`MX`, `PRO`), or a number when the names do not tell them apart. A device that is alone in its kind shows no caption.
