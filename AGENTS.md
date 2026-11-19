@@ -27,10 +27,11 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
   (19 Nov 2026); upstream merges will bring `battery_history.*`, `history_model.h` and
   `runtime_estimate.h` changes back as conflicts: keep them deleted. Translations stay (~0.1 MB).
 - Updater: `updates::Repository = "ahizechi/Battery"` (also `scripts/sign-release.ps1`, and
-  `build.yml` builds `stable` only there). It checks once a day, failures included. The original's
-  public key was removed from `src/update_public_key.h`: until Zek runs
-  `scripts/new-release-key.ps1` (Zek's own password, on Zek's PC), official builds do not compile and nothing
-  installs. The GitHub API cannot see releases of a private repo, so updates need the repo public.
+  `build.yml` builds `stable` only there). It checks once a day, failures included.
+  `src/update_public_key.h` holds only Zek's release key (19 Nov 2026; the original's was removed).
+  The encrypted private key is `%USERPROFILE%\.wirelessbattery\release-key.wbk` on Zek's PC, never in
+  the repo; each release is signed there with `scripts/sign-release.ps1` (Zek's password,
+  docs/releasing.md). The repo is public, as the GitHub releases API requires.
 
 ## Project facts
 
