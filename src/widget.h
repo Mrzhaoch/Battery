@@ -13,7 +13,7 @@ struct WidgetItem {
     int  percent  = -1;     // -1 = unknown
     std::wstring text;      // shown instead of the percentage when set (coarse levels like "Low")
     bool charging = false;
-    bool full     = false;  // on power and fully charged: a green check mark instead of the bolt
+    bool full     = false;  // on power and fully charged: a full green battery symbol
     bool dim      = false;  // asleep / stale value
     bool low      = false;
     bool bluetooth = false;  // picks the Bluetooth icon when the device type is unknown
@@ -34,6 +34,8 @@ void SetLightTheme(bool light);
 void SetBackground(bool on);
 // Icon above the percentage instead of beside it, when the taskbar is tall enough (kept across Create/Destroy).
 void SetStacked(bool on);
+// A green battery symbol (filled to the level) after a charging or full device; kept across Create/Destroy.
+void SetShowCharging(bool on);
 // Which taskbars show the strip: L"all" (default), L"main", or the id of one other monitor from
 // OtherMonitors() (then only that monitor shows it). Kept across Create/Destroy.
 void SetMonitorChoice(const std::wstring& choice);

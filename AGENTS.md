@@ -10,8 +10,9 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 
 - Remote `upstream` = the original (push disabled). Sync by merging `upstream/main` into an
   `ai/` branch; never rewrite upstream history.
-- Fork-only changes: no charging bolt on the taskbar (`src/widget.cpp`, `mark = it.full`; the
-  tooltip and tray colour still show charging, the full-charge check mark is kept), and hardware
+- Fork-only changes: charging / full shows as a green level-filled battery glyph, not upstream's
+  bolt / check (`src/widget.cpp` `BatteryGlyph`, menu *Show charging*, registry `ShowCharging`;
+  WLMouse Beast MAX cable `36A7:A881` added, cables share their receiver's key), and hardware
   readings after the batteries (`src/hardware.*`, pure logic in `src/hardware_model.h` with
   `tests/hardware_model_test.cpp`; `WidgetItem::tag`/`warm`; menu *Hardware on the taskbar*,
   registry `HardwareReadings` bitmask, default 0; `HardwareRefreshSeconds` 1/2/5, default 5;

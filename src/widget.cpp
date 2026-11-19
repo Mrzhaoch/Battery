@@ -14,6 +14,7 @@ UINT g_clickMsg;
 bool g_light, g_hover;
 bool g_background;  // opaque rounded plate behind the text, for transparent / restyled taskbars
 bool g_stacked;     // icon above the percentage (menu option, PR #525)
+bool g_showCharging = true;  // battery symbol after a charging / full device (menu option, Zek's fork)
 bool g_vertical;    // the primary taskbar is docked left or right: one block per device, stacked (PR #321)
 std::vector<WidgetItem> g_items;
 std::wstring g_tipText;
@@ -254,9 +255,15 @@ wchar_t Glyph(DeviceKind k, bool bluetooth) {
         default:                   return bluetooth ? 0xE702 : 0xE772;  // Bluetooth / Devices
     }
 }
-constexpr wchar_t kBolt = 0xE945;            // LightningBolt
-constexpr wchar_t kCheck = 0xE73E;           // CheckMark, in place of the bolt once fully charged
 constexpr wchar_t kBatteryUnknown = 0xE996;  // shown when there is nothing to display
+
+// Zek's fork: a charging (or full, on power) device gets a small horizontal battery after its number, filled
+// to its level like the battery in the iOS / macOS status bar, instead of upstream's lightning bolt / check
+// mark. Windows' icon font has it in 11 steps: Battery0 E850 ... Battery9 E859, Battery10 E83F.
+wchar_t BatteryGlyph(int pct) {
+    int step = pct < 0 ? 10 : std::clamp((pct + 5) / 10, 0, 10);
+    return step == 10 ? (wchar_t)0xE83F : (wchar_t)(0xE850 + step);
+}
 
 // Creates a font, falling back when the preferred face is not installed (GDI would silently substitute).
 HFONT MakeFont(int px, int weight, const wchar_t* face, const wchar_t* fallback, int fallbackPx = 0) {
@@ -400,12 +407,11 @@ struct Piece {
 std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     Rgb fg = g_light ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 };
     Rgb red = g_light ? Rgb{ 196, 30, 40 } : Rgb{ 255, 90, 90 };
-    Rgb charge = g_light ? Rgb{ 0, 120, 212 } : Rgb{ 96, 205, 255 };
-    Rgb full = g_light ? Rgb{ 16, 124, 16 } : Rgb{ 108, 203, 95 };  // Windows "success" green
+    Rgb green = g_light ? Rgb{ 16, 124, 16 } : Rgb{ 108, 203, 95 };  // Windows "success" green: charging / full
     Rgb orange = g_light ? Rgb{ 188, 75, 0 } : Rgb{ 255, 160, 70 };  // hardware temperature warning
     HFONT tagFont = MakeFont(Px(10), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // "CPU", "GPU", ...
     HFONT icons = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
-    HFONT bolt = MakeFont(Px(11), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
+    HFONT bolt = MakeFont(Px(15), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");  // the battery symbol
     HFONT text = MakeFont(Px(13), FW_NORMAL, L"Segoe UI Variable Text", L"Segoe UI", Px(12));
     HFONT caption = MakeFont(std::max(8, Px(7)), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // never under 8 px
 
@@ -417,8 +423,8 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
         const auto& it = g_items[i];
         int a = it.dim ? 120 : 255;
         Rgb tc = it.low ? red : it.warm ? orange : fg;
-        // Zek's fork: no bolt while charging (charging shows in the tooltip); green check mark once full.
-        bool mark = it.full;
+        // Zek's fork: a green battery symbol while charging or full on power ("Show charging" in the menu).
+        bool mark = g_showCharging && it.tag.empty() && (it.charging || it.full);
         size_t glyph = out.size();
         slots.push_back({ (int)glyph, (int)glyph + 1, mark ? (int)glyph + 2 : -1 });
         bool branded = it.accent != Accent::None;
@@ -435,13 +441,13 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
         }
         out.push_back(std::move(icon));
         std::wstring t = !it.text.empty() ? it.text : it.percent >= 0 ? std::to_wstring(it.percent) + L"%" : L"?";
-        Piece label{ RenderMask(t, text, g_light), tc, a, mark ? Px(2) : 0 };
+        Piece label{ RenderMask(t, text, g_light), tc, a, mark ? Px(3) : 0 };
         if (branded && it.percent >= 0) {
             label.barPct = it.percent;
             label.barColor = it.low ? red : accent;
         }
         out.push_back(std::move(label));
-        if (mark) out.push_back({ RenderMask(std::wstring(1, it.full ? kCheck : kBolt), bolt, g_light), it.full ? full : charge, a, 0 });
+        if (mark) out.push_back({ RenderMask(std::wstring(1, BatteryGlyph(it.full ? 100 : it.percent)), bolt, g_light), green, a, 0 });
         out.back().gapAfter = i + 1 < g_items.size() ? Px(14) : 0;
         if (!it.label.empty()) {  // tiny caption in the bottom-right corner of the icon
             Piece c{ RenderMask(it.label, caption, g_light), fg, a, 0 };
@@ -946,6 +952,12 @@ void SetBackground(bool on) {
 
 void SetStacked(bool on) {
     g_stacked = on;
+    PaintAll();
+    if (g_wnd) Reposition();
+}
+
+void SetShowCharging(bool on) {
+    g_showCharging = on;
     PaintAll();
     if (g_wnd) Reposition();
 }

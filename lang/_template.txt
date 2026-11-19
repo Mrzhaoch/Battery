@@ -55,6 +55,7 @@ Main monitor only =
 Chosen monitor (not connected, shown on main) = 
 Show the widget on = 
 Brand colors (Razer green, Logitech blue, ...) =
+Show charging (battery symbol) =
 Read batteries from =
 Bluetooth devices and earbuds =
 Phone (Microsoft Phone Link) =

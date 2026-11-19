@@ -52,7 +52,7 @@ constexpr UINT ALERT_ICON_ID = 2;
 
 enum MenuId : UINT {
     ID_REFRESH = 100, ID_AUTOSTART, ID_HIDE_LAST_KNOWN, ID_WIDGET_BACKGROUND, ID_EXIT, ID_MODE_WIDGET, ID_MODE_TRAY, ID_SUPPORT, ID_REPORT,
-    ID_BRAND_COLORS, ID_STACKED, ID_SHOW_DISCONNECTED,
+    ID_BRAND_COLORS, ID_STACKED, ID_SHOW_DISCONNECTED, ID_SHOW_CHARGING,
     ID_POLL_FIRST = 500,  // "Check battery every": ID_POLL_FIRST + 0..7
     ID_HARDWARE_FIRST = 600,  // "Hardware on the taskbar": ID_HARDWARE_FIRST + hardware::Metric
     ID_HARDWARE_RATE_FIRST = 620,  // its "Refresh every": ID_HARDWARE_RATE_FIRST + index into HARDWARE_SECONDS
@@ -86,6 +86,7 @@ std::wstring g_widgetMonitor = L"all";  // which taskbars show the widget: "all"
 bool g_widgetBackground = false;  // draw a plate behind the taskbar text (transparent taskbar themes)
 bool g_stacked = false;      // icon above the percentage (menu option)
 bool g_brandColors = false;  // off by default; known brands get their color (Razer green, Logitech blue, ...)
+bool g_showCharging = true;  // battery symbol on the taskbar and the blue tray bar while charging (menu option)
 unsigned g_hardwareMask = 0;  // hardware readings after the batteries (taskbar widget only); off by default
 UINT g_hardwareSeconds = HARDWARE_DEFAULT_SECONDS;
 bool g_displayOn = true;  // hardware readings pause while the display is off (Windows tells us)
@@ -345,6 +346,7 @@ void SetWidgetMonitor(const std::wstring& v) {
 bool LoadStacked() { return LoadBoolSetting(L"StackedLayout", false); }
 void SaveStacked(bool on) { SaveBoolSetting(L"StackedLayout", on); }
 bool LoadBrandColors() { return LoadBoolSetting(L"BrandColors", false); }
+bool LoadShowCharging() { return LoadBoolSetting(L"ShowCharging", true); }
 void SaveBrandColors(bool on) { SaveBoolSetting(L"BrandColors", on); }
 unsigned LoadHardwareMask() {  // default: none, only batteries are shown
     DWORD v = 0, sz = sizeof(v);
@@ -605,7 +607,7 @@ void ApplyEntry(TrayEntry& e) {
     int shown = !s.connected ? -1 : (s.percent >= 0 ? s.percent : e.lastPct);
     bool dim = !s.connected || s.percent < 0;
     // Fully charged on power: the normal green bar instead of the blue charging one.
-    bool charging = s.connected && !s.asleep && s.charging && !s.full && shown < 100;
+    bool charging = g_showCharging && s.connected && !s.asleep && s.charging && !s.full && shown < 100;
     Accent accent = AccentFor(s);
     std::wstring sig = std::to_wstring(shown) + (charging ? L"c" : L"") + (dim ? L"d" : L"") + (g_lightTaskbar ? L"l" : L"k") +
                        L"a" + std::to_wstring((int)accent) + (s.connected ? L"|on" : L"|off");
@@ -1097,6 +1099,7 @@ void ShowMenu() {
         AppendMenuW(m, MF_POPUP | (g_wantWidget ? 0 : MF_GRAYED), (UINT_PTR)sub, T(L"Show the widget on"));
     }
     AppendMenuW(m, MF_STRING | (g_brandColors ? MF_CHECKED : 0), ID_BRAND_COLORS, T(L"Brand colors (Razer green, Logitech blue, ...)"));
+    AppendMenuW(m, MF_STRING | (g_showCharging ? MF_CHECKED : 0), ID_SHOW_CHARGING, T(L"Show charging (battery symbol)"));
     {
         HMENU sub = CreatePopupMenu();
         for (hardware::Metric hm : kHardwareOrder)
@@ -1180,6 +1183,13 @@ void ShowMenu() {
         case ID_LANG_ADD: i18n::OpenUserFolder(); break;
         case ID_MONITOR_MAIN: SetWidgetMonitor(L"main"); break;
         case ID_BRAND_COLORS: SetBrandColors(!g_brandColors); break;
+        case ID_SHOW_CHARGING:
+            g_showCharging = !g_showCharging;
+            SaveBoolSetting(L"ShowCharging", g_showCharging);
+            widget::SetShowCharging(g_showCharging);
+            RedrawAll();  // tray icons drop or regain the blue charging bar
+            UpdateWidget();
+            break;
         case ID_STACKED: SetStacked(!g_stacked); break;
         case ID_MODE_WIDGET: SetMode(true); break;
         case ID_MODE_TRAY: SetMode(false); break;
@@ -1519,6 +1529,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     g_showDisconnectedDevices = LoadShowDisconnectedDevices();
     g_widgetBackground = LoadWidgetBackground();
     g_brandColors = LoadBrandColors();
+    g_showCharging = LoadShowCharging();
+    widget::SetShowCharging(g_showCharging);
     g_stacked = LoadStacked();
     g_hardwareMask = LoadHardwareMask();
     g_hardwareSeconds = LoadHardwareSeconds();

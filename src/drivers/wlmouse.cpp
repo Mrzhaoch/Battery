@@ -7,6 +7,8 @@
 // list as recorded by github.com/late-autumn-gif/mousedock (docs/device-db/mouse-db.json, same Feature 0 /
 // 0x83 battery query), github.com/OpenMouse-Project/mouse-protocol (src/drivers/vendors.ts) and
 // github.com/Zelozzzz/dorsal (src/dorsal/models.py). A860 was polled before as an unnamed cable.
+// Beast MAX: A880 receiver; A881 is its USB cable (an owner's --dump while charging, 19 Nov 2026), with the
+// same FFFF:0000 65-byte collection on interface 2. Without it a charging Beast MAX read as asleep.
 // Read-only status query on the vendor collection (usage page FFFF, 65-byte feature report 0):
 //   SET_FEATURE [00][00][00][02][02][00][83][00 ...], then GET_FEATURE report 0 until
 //   [00][status][00][02][02][00][83][charging][battery%]; status A1 / A2 = answered, A0 = mouse asleep.
@@ -33,6 +35,7 @@ const Model kModels[] = {
     { 0xA866, false, L"WLMouse mouse", 0 },
     { 0xA867, false, L"WLMouse mouse", 0 },
     { 0xA871, false, L"WLMouse Beast X Pro", 0xA870 },  // cable; tested on the charging Beast X Pro
+    { 0xA881, false, L"WLMouse Beast MAX", 0xA880 },  // cable; seen on a charging Beast MAX (FFFF:0000, iface 2)
     { 0xA856, true, L"WLMouse Beast X V2", 0 },  // 8K receiver; seen with a Beast X V2 Max
     { 0xA860, true, L"WLMouse Beast G", 0 },  // 8K receiver
     { 0xA868, true, L"WLMouse Beast X Mini Pro", 0 },
@@ -86,7 +89,9 @@ void PollWlmouse(PollContext& ctx) {
             Reply rep = Query(d, pct, charging);
             if (rep == Reply::None) continue;
             DeviceStatus s;
-            s.key = L"wlmouse:" + Hex4(m.pid);
+            // A cable shares its receiver's key, so the mouse keeps one identity (order, alerts, name)
+            // whether it is plugged in or wireless.
+            s.key = L"wlmouse:" + Hex4(m.receiverPid ? m.receiverPid : m.pid);
             s.name = m.name;
             s.kind = DeviceKind::Mouse;
             s.via = m.receiver ? L"2.4 GHz receiver" : L"USB cable";

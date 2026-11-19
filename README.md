@@ -28,7 +28,7 @@ Compared with BatteryHub 1.1.0 (the fork follows upstream and merges its updates
 | **Added** | **Hardware readings** after the batteries, off until you switch them on: `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`. No driver, no admin rights, no CPU temperature, nothing read while the display is off ([details](#display)). The idea comes from [TraySense](https://github.com/DMTWEAKS/TraySense) by DMTWEAKS; no code was taken from it. |
 | **Added** | **Off means not read.** *Read batteries from* switches off Bluetooth, Phone Link, Xbox controllers or HeadsetControl entirely; a hidden device is no longer opened at all; the Bluetooth broadcast listener stops when nothing needs it. |
 | **Removed** | **Battery history** (history window, recording to disk and the time-to-empty estimate), to keep the app small. |
-| **Changed** | **No charging bolt** on the taskbar; charging still shows in the tooltip and the tray icon, and a green ✓ still marks a full battery. |
+| **Changed** | **Charging shows as a clean battery symbol** (green, filled to the level, like iOS / macOS) instead of a lightning bolt, and a full battery on power shows it full. *Show charging* in the menu turns it off. |
 | **Changed** | **Updates come only from this repository**, are checked once a day, and are only installed when signed with this fork's own release key. BatteryHub's key is not built in, so an official BatteryHub update never replaces this fork, and vice versa. |
 
 Everything else (devices, display options, alerts, languages, command line) is BatteryHub's and
@@ -47,7 +47,7 @@ here are only for what this fork changes.
 
 **On the taskbar (default):** `🎧 30%  🖱 93%` next to the notification area, drawn with the Windows icon font.
 - **Low battery:** a red number means 15% or less.
-- **Charging:** shown in the hover tooltip and the tray icon's colour (this fork leaves the ⚡ off the taskbar). Once the device is fully charged and still on power, a green ✓ appears next to the number.
+- **Charging:** a small green battery symbol, filled to the current level, appears after the number while a device charges, and shows full once it is fully charged and still on power (this fork's replacement for BatteryHub's ⚡ and ✓). *Show charging (battery symbol)* in the menu turns it, and the tray icon's blue charging bar, off; the hover tooltip still says "charging".
 - **Asleep:** dimmed text means the device is asleep and the last known value is shown.
 - **Disconnected (optional):** turn on *Show disconnected devices* to display a dimmed `×` for devices whose driver explicitly reports an offline wireless link. This does not infer disconnection from a missed battery poll; the default remains to hide offline devices.
 - **Two devices of one kind:** with two mice (or two controllers...) both would get the same icon, so each one gets a tiny caption of up to 3 letters in the corner of its icon, taken from its name (`MX`, `PRO`), or a number when the names do not tell them apart. A device that is alone in its kind shows no caption.
@@ -414,7 +414,7 @@ the remaining vendors are planned follow-up phases.
 ## Limitations
 
 - **Crowded taskbars:** with a very full centered Windows 11 taskbar, the app buttons can reach the widget. On Windows 10 the task-button area is narrowed automatically.
-- **Phones:** read from a file Phone Link writes for the Start menu companion card, which is not a documented API and may change with Phone Link updates. The phone shows while Phone Link reports it as connected; a card older than 3 hours is shown dimmed. The card also says when the phone is charging, which shows as the charging bolt.
+- **Phones:** read from a file Phone Link writes for the Start menu companion card, which is not a documented API and may change with Phone Link updates. The phone shows while Phone Link reports it as connected; a card older than 3 hours is shown dimmed. The card also says when the phone is charging, which shows as the charging battery symbol.
 - **Sleeping devices:** a device that is asleep may not answer. Its last value stays visible, dimmed. Logitech receivers drop sleeping devices from the link, so their last value is kept for 30 minutes.
 - **HECATE G2 Wireless 7.1 headset** (2.4 GHz dongle `35BB:A009` / `A209`): no battery query for its dongle is documented yet, so it is not read. A USB capture while the HECATE software shows the headset battery (see CONTRIBUTING.md) is the way to add it.
 - **Keychron keyboards:** with stock firmware they only report their battery over Bluetooth (shown via the Bluetooth support). Over the 2.4 GHz receiver or the cable they need firmware with the battery patch ([docs/keychron_keyboard_firmware/README.md](docs/keychron_keyboard_firmware/README.md)); updating the keyboard from Keychron Launcher removes it. Keychron mice are supported.
