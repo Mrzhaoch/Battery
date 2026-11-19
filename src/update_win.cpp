@@ -120,8 +120,10 @@ Result FetchRelease() {
         return out;
     }
     HINTERNET connection = WinHttpConnect(session, L"api.github.com", INTERNET_DEFAULT_HTTPS_PORT, 0);
-    HINTERNET req = connection ? WinHttpOpenRequest(connection, L"GET",
-        L"/repos/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest", nullptr,
+    std::wstring path = L"/repos/";
+    for (const char* c = Repository; *c; c++) path.push_back((wchar_t)(unsigned char)*c);  // ASCII
+    path += L"/releases/latest";
+    HINTERNET req = connection ? WinHttpOpenRequest(connection, L"GET", path.c_str(), nullptr,
         WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
     DWORD redirect = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
     bool configured = req && WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &redirect, sizeof(redirect));

@@ -93,11 +93,13 @@ int main() {
     assert(!p.ManualAllowed(now + 59) && p.ManualAllowed(now + 60));
     updates::CheckSchedule restarted = p;
     assert(!restarted.Due(now + 100));
-    p.Finished(now, false);
-    assert(!p.Due(now + 3599) && p.Due(now + 3600));
+    p.Finished(now, false);  // a failed check also waits a day
+    assert(!p.Due(now + 3600) && !p.Due(now + 86399) && p.Due(now + 86400));
     p.Finished(now, false, now + 7200);
     assert(!p.ManualAllowed(now + 7000) && p.ManualAllowed(now + 7200));
-    assert(!p.Due(now + 7199) && p.Due(now + 7200));
+    assert(!p.Due(now + 7200) && p.Due(now + 86400));
+    p.Finished(now, false, now + 2 * 86400);  // the server asks for longer: that wins
+    assert(!p.Due(now + 86400) && p.Due(now + 2 * 86400));
     assert(p.Due(now - 86401) && p.ManualAllowed(now - 86401));
     wchar_t temporary[MAX_PATH], file[MAX_PATH];
     assert(GetTempPathW(ARRAYSIZE(temporary), temporary));

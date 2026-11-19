@@ -8,6 +8,12 @@
 // Starts the watcher, or restarts it after the radio was switched off. Returns true when it was just
 // started, so the caller can give devices a moment (they broadcast about every 1-2 s) to be heard.
 bool EnsureBleWatcher();
+// The watcher runs only while a poll still needs it: BeginBlePoll() before the drivers run, EndBlePoll()
+// after them stops it when no driver called EnsureBleWatcher() (no AirPods / Bluetooth headset left, or
+// Bluetooth switched off in the menu). StopBleWatcher() stops it right away. All on the poll thread.
+void BeginBlePoll();
+void EndBlePoll();
+void StopBleWatcher();
 
 // Apple manufacturer data (company 0x004C), see airpods.cpp.
 void AirPodsOnAdvert(UINT64 addr, int rssi, const BYTE* data, UINT32 len);

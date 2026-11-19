@@ -10,10 +10,25 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 
 - Remote `upstream` = the original (push disabled). Sync by merging `upstream/main` into an
   `ai/` branch; never rewrite upstream history.
-- Fork-only change: no charging bolt on the taskbar (`src/widget.cpp`, `mark = it.full`); the
-  tooltip and tray colour still show charging, and the full-charge check mark is kept.
-- The updater (`src/update_core.h`, `src/update_win.cpp`) checks the original's releases, signed
-  with its maintainer's key, so installing an update replaces a fork build with upstream's.
+- Fork-only changes: no charging bolt on the taskbar (`src/widget.cpp`, `mark = it.full`; the
+  tooltip and tray colour still show charging, the full-charge check mark is kept), and hardware
+  readings after the batteries (`src/hardware.*`, pure logic in `src/hardware_model.h` with
+  `tests/hardware_model_test.cpp`; `WidgetItem::tag`/`warm`; menu *Hardware on the taskbar*,
+  registry `HardwareReadings` bitmask). No CPU temperature and no kernel driver, by Zek's choice
+  (19 Nov 2026); TraySense (AGPL) inspired it but none of its code is used.
+- Zek's rule for this fork: minimal RAM, and anything switched off is not read at all. Sources:
+  `PollOptions` (`devices.h`; registry `ReadBluetooth`, `ReadPhoneLink`, `ReadXInput`,
+  `ReadHeadsetControl`), hidden devices skipped by VID:PID (`PausedDevices`; drivers must set
+  `DeviceStatus::pid`, which `ctx.Add` does), BLE watcher stopped by `EndBlePoll()` when unused.
+  New features follow the same rule: off = nothing loaded, opened or polled.
+- Battery history (window, recording, time-to-empty estimate) was removed on Zek's request
+  (19 Nov 2026); upstream merges will bring `battery_history.*`, `history_model.h` and
+  `runtime_estimate.h` changes back as conflicts: keep them deleted. Translations stay (~0.1 MB).
+- Updater: `updates::Repository = "ahizechi/Battery"` (also `scripts/sign-release.ps1`, and
+  `build.yml` builds `stable` only there). It checks once a day, failures included. The original's
+  public key was removed from `src/update_public_key.h`: until Zek runs
+  `scripts/new-release-key.ps1` (Zek's own password, on Zek's PC), official builds do not compile and nothing
+  installs. The GitHub API cannot see releases of a private repo, so updates need the repo public.
 
 ## Project facts
 
@@ -25,10 +40,10 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 - Package manager: none.
 - Entry points: `src/main.cpp`, `src/devices.cpp`, `src/widget.cpp`, `src/hid.cpp`; one driver
   per vendor in `src/drivers/`; resources in `res/`; installer in `installer/` (Inno Setup).
-- External services and stored data: network only for the menu-driven update check (GitHub
-  releases API; installs only setups listed in a maintainer-signed SHA256SUMS.txt, downloaded to
-  `%LOCALAPPDATA%`). Reads a Phone Link card file for phone battery; keeps local battery history
-  (can be turned off). Release builds download the pinned HeadsetControl and verify its checksum.
+- External services and stored data: network only for the update check (GitHub releases API of
+  `ahizechi/Battery`; installs only setups listed in a SHA256SUMS.txt signed with Zek's key,
+  downloaded to `%LOCALAPPDATA%`). Reads a Phone Link card file for phone battery. Release builds
+  download the pinned HeadsetControl and verify its checksum.
 - Also: translations in `lang/`, `--json` output, a Linux build (`src/linux/`, GTK4 tray).
 - Hard invariants (CONTRIBUTING.md): drivers send read-only requests only, match devices by exact
   vendor/product ID or a protocol-unique collection, time out (about 1 s; at most 4 s per
@@ -40,7 +55,7 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 ## Verified commands (from config; not run here)
 
 - Build: `make` (MSYS2 MINGW64) or `build.bat` (g++ and windres on PATH) -> `BatteryHub.exe`.
-- Test: `make test` (driver, history, alert, updater and release-signature tests).
+- Test: `make test` (driver, hardware, alert, updater and release-signature tests).
 - Installer and portable zip: `powershell -File installer\build-installer.ps1 -Version <x.y.z>`
   (needs Inno Setup).
 - CI: `.github/workflows/build.yml` on windows-latest builds, tests and packages; a `v*` tag

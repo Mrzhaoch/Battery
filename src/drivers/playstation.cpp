@@ -60,6 +60,8 @@ void PollPlayStation(PollContext& ctx) {
         s.via = bt ? L"Bluetooth" : (c.pid == 0x0BA0 ? L"Wireless adapter" : L"USB cable");
         s.percent = pct;
         s.charging = charging;
+        s.vid = c.vid;
+        s.pid = c.pid;  // lets a hidden device be skipped (main.cpp)
         ctx.out.push_back(s);
         ctx.Claim(c.vid, c.pid);
     }

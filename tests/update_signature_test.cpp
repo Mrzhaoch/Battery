@@ -40,8 +40,9 @@ int main() {
     assert(!VerifySignature(std::string(MaxSumsBytes + 1, 'a'), signature, key));
     assert(!VerifySignature(sums, std::string(MaxSignatureBytes + 1, 'A'), key));
 
-    // The release key is configured, and a signature by any other key (this test key) is not a release.
-    assert(ReleaseKeyConfigured());
+    // A signature by any key other than the release key (this test key) is never a release. Whether a
+    // release key is configured is enforced at compile time for official builds (update_signature.cpp).
+    (void)ReleaseKeyConfigured();
     assert(!VerifyReleaseSignature(sums, signature));
 
     // Hash lookup in the list.

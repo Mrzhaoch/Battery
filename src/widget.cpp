@@ -402,6 +402,8 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     Rgb red = g_light ? Rgb{ 196, 30, 40 } : Rgb{ 255, 90, 90 };
     Rgb charge = g_light ? Rgb{ 0, 120, 212 } : Rgb{ 96, 205, 255 };
     Rgb full = g_light ? Rgb{ 16, 124, 16 } : Rgb{ 108, 203, 95 };  // Windows "success" green
+    Rgb orange = g_light ? Rgb{ 188, 75, 0 } : Rgb{ 255, 160, 70 };  // hardware temperature warning
+    HFONT tagFont = MakeFont(Px(10), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // "CPU", "GPU", ...
     HFONT icons = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
     HFONT bolt = MakeFont(Px(11), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
     HFONT text = MakeFont(Px(13), FW_NORMAL, L"Segoe UI Variable Text", L"Segoe UI", Px(12));
@@ -414,7 +416,7 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     for (size_t i = 0; i < g_items.size(); i++) {
         const auto& it = g_items[i];
         int a = it.dim ? 120 : 255;
-        Rgb tc = it.low ? red : fg;
+        Rgb tc = it.low ? red : it.warm ? orange : fg;
         // Zek's fork: no bolt while charging (charging shows in the tooltip); green check mark once full.
         bool mark = it.full;
         size_t glyph = out.size();
@@ -422,7 +424,10 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
         bool branded = it.accent != Accent::None;
         BrandColor bc = AccentColor(it.accent, g_light);
         Rgb accent{ bc.r, bc.g, bc.b };
-        Piece icon{ RenderMask(std::wstring(1, Glyph(it.kind, it.bluetooth)), icons, g_light), branded ? accent : fg, a, Px(5) };
+        // Hardware readings show a short tag ("CPU") instead of a glyph, a little fainter than the number.
+        Piece icon = it.tag.empty()
+                         ? Piece{ RenderMask(std::wstring(1, Glyph(it.kind, it.bluetooth)), icons, g_light), branded ? accent : fg, a, Px(5) }
+                         : Piece{ RenderMask(it.tag, tagFont, g_light), fg, a * 170 / 255, Px(4) };
         if (branded && !it.dim) {
             icon.haloR = Px(3);
             icon.halo = Halo(icon.m, icon.haloR);
@@ -447,6 +452,7 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
         }
     }
     DeleteObject(icons);
+    DeleteObject(tagFont);
     DeleteObject(bolt);
     DeleteObject(text);
     DeleteObject(caption);

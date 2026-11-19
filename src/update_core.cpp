@@ -65,7 +65,8 @@ bool CheckSchedule::ManualAllowed(std::uint64_t now) const {
 void CheckSchedule::Finished(std::uint64_t now, bool success, std::uint64_t serverRetry) {
     lastAttempt = now;
     retryAfter = serverRetry > now ? serverRetry : 0;
-    nextAutomatic = now + (success ? 24 * 60 * 60 : 60 * 60);
+    nextAutomatic = now + 24 * 60 * 60;  // once a day, also after a failed check (Zek's fork)
+    (void)success;
     if (retryAfter > nextAutomatic) nextAutomatic = retryAfter;
 }
 

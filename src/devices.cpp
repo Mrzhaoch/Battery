@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cwchar>
+#include <cwctype>
 
+#include "drivers/ble_adverts.h"
 #include "drivers/drivers.h"
 #include "report.h"
 #include "hid.h"
@@ -35,17 +37,30 @@ std::vector<std::pair<USHORT, USHORT>> IgnoredDevices() {
     return out;
 }
 
+// Bluetooth HID collections carry the Bluetooth HID service in their path: {00001124-...} for Bluetooth
+// Classic, {00001812-...} for Bluetooth LE (HID over GATT).
+bool IsBluetoothHid(const HidColl& c) {
+    std::wstring p = c.path;
+    for (auto& ch : p) ch = (wchar_t)towlower(ch);
+    return p.find(L"{00001124-0000-1000-8000-00805f9b34fb}") != std::wstring::npos ||
+           p.find(L"{00001812-0000-1000-8000-00805f9b34fb}") != std::wstring::npos;
+}
+
 }  // namespace
 
-std::vector<DeviceStatus> PollAllDevices() {
+std::vector<DeviceStatus> PollAllDevices() { return PollDevices(PollOptions{}); }
+
+std::vector<DeviceStatus> PollDevices(const PollOptions& options) {
     PollContext ctx;
     ctx.colls = EnumHid();
     auto ignored = IgnoredDevices();
-    if (!ignored.empty())
-        ctx.colls.erase(std::remove_if(ctx.colls.begin(), ctx.colls.end(), [&](const HidColl& c) {
-                            return std::find(ignored.begin(), ignored.end(), std::make_pair(c.vid, c.pid)) != ignored.end();
-                        }),
-                        ctx.colls.end());
+    ignored.insert(ignored.end(), options.skip.begin(), options.skip.end());
+    ctx.colls.erase(std::remove_if(ctx.colls.begin(), ctx.colls.end(), [&](const HidColl& c) {
+                        return (!options.bluetooth && IsBluetoothHid(c)) ||
+                               std::find(ignored.begin(), ignored.end(), std::make_pair(c.vid, c.pid)) != ignored.end();
+                    }),
+                    ctx.colls.end());
+    BeginBlePoll();  // the BLE watcher stops after this poll unless a driver below still needs it
     PollGlorious(ctx);
     PollAula(ctx);       // before Kysona (shares the 3554 vendor id) and SONiX (shares 05AC:024F)
     PollAulaMouse(ctx);
@@ -125,21 +140,22 @@ std::vector<DeviceStatus> PollAllDevices() {
     PollGameSir(ctx);
     PollFlydigi(ctx);
     PollGameSirCyclone(ctx);
-    PollGameSirBle(ctx);  // Cyclone Pro: battery over BLE; claims its dongle before the XInput fallback
+    if (options.bluetooth) PollGameSirBle(ctx);  // Cyclone Pro: battery over BLE; claims its dongle before XInput
     Poll8BitDo(ctx);
     PollBeitong(ctx);  // before the XInput fallback, which only sees the receiver as wired
-    PollAirPods(ctx);  // before the Bluetooth fallback, which has no level for AirPods
-    PollPhoneLink(ctx);
-    PollGalaxyBuds(ctx);  // before the Bluetooth fallback, which skips devices already listed by name
-    PollNothingEar(ctx);  // before the Bluetooth fallback, which skips devices already listed by name
+    if (options.bluetooth) PollAirPods(ctx);  // before the Bluetooth fallback, which has no level for AirPods
+    if (options.phoneLink) PollPhoneLink(ctx);
+    if (options.bluetooth) PollGalaxyBuds(ctx);  // before the Bluetooth fallback, which skips devices listed by name
+    if (options.bluetooth) PollNothingEar(ctx);  // before the Bluetooth fallback, which skips devices listed by name
     PollMoondrop(ctx);
     PollDarkrim(ctx);
     PollAlienware(ctx);
     PollMaono(ctx);  // MAONO PD200W receiver (352F:040E), experimental battery query
-    PollHeadsetControl(ctx);
-    PollBluetooth(ctx);   // before the generic HID check: Windows' own level wins for the same device
+    if (options.headsetControl) PollHeadsetControl(ctx);
+    if (options.bluetooth) PollBluetooth(ctx);  // before the generic HID check: Windows' own level wins
     PollGenericHid(ctx);
-    PollXInput(ctx);
+    if (options.xinput) PollXInput(ctx);
+    EndBlePoll();  // when no driver listened for broadcasts this time: stop scanning, release the watcher
     return ctx.out;
 }
 

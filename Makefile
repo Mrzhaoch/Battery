@@ -40,10 +40,8 @@ test: test-update-core test-update-win test-update-signature
 	./build/device_aliases_test.exe
 	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/alert_rules_test.cpp -o build/alert_rules_test.exe
 	./build/alert_rules_test.exe
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/history_model_test.cpp -o build/history_model_test.exe
-	./build/history_model_test.exe
-	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/runtime_estimate_test.cpp -o build/runtime_estimate_test.exe
-	./build/runtime_estimate_test.exe
+	$(CXX) -std=c++17 -O2 -Wall -Wextra tests/hardware_model_test.cpp -o build/hardware_model_test.exe
+	./build/hardware_model_test.exe
 	$(CXX) $(CXXFLAGS) tests/aula_mouse_driver_test.cpp src/drivers/aula_mouse.cpp -o build/aula_mouse_driver_test.exe
 	./build/aula_mouse_driver_test.exe
 	$(CXX) $(CXXFLAGS) tests/darkrim_driver_test.cpp src/drivers/darkrim.cpp -o build/darkrim_driver_test.exe

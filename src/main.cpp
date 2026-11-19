@@ -18,7 +18,8 @@
 #include "device_aliases.h"
 #include "alert_rules.h"
 #include "devices.h"
-#include "battery_history.h"
+#include "hardware.h"
+#include "hardware_model.h"
 #include "i18n.h"
 #include "json_output.h"
 #include "labels.h"
@@ -36,6 +37,8 @@ constexpr UINT WM_WIDGET_CLICK = WM_APP + 3;
 constexpr UINT_PTR TIMER_DEBOUNCE = 1;
 constexpr UINT_PTR TIMER_WIDGET = 2;
 constexpr UINT_PTR TIMER_ALERT_ICON = 3;
+constexpr UINT_PTR TIMER_HARDWARE = 4;
+constexpr UINT HARDWARE_MS = 2000;  // how often the hardware readings refresh
 // "Check battery every" choices in seconds; 60 is the default. A poll resets an awake device's sleep timer,
 // so a device only sleeps if its timer is shorter than the interval.
 constexpr DWORD POLL_SECONDS[] = { 30, 60, 120, 300, 600, 900, 1800, 3600 };
@@ -45,15 +48,17 @@ constexpr UINT ALERT_ICON_ID = 2;
 
 enum MenuId : UINT {
     ID_REFRESH = 100, ID_AUTOSTART, ID_HIDE_LAST_KNOWN, ID_WIDGET_BACKGROUND, ID_EXIT, ID_MODE_WIDGET, ID_MODE_TRAY, ID_SUPPORT, ID_REPORT,
-    ID_BRAND_COLORS, ID_STACKED, ID_SHOW_DISCONNECTED, ID_RECORD_HISTORY,
+    ID_BRAND_COLORS, ID_STACKED, ID_SHOW_DISCONNECTED,
     ID_POLL_FIRST = 500,  // "Check battery every": ID_POLL_FIRST + 0..7
+    ID_HARDWARE_FIRST = 600,  // "Hardware on the taskbar": ID_HARDWARE_FIRST + hardware::Metric
+    ID_SOURCE_BLUETOOTH = 700, ID_SOURCE_PHONE_LINK, ID_SOURCE_XINPUT, ID_SOURCE_HEADSETCONTROL,  // "Read batteries from"
     ID_UPDATE = 200, ID_AUTO_UPDATE,
     ID_LANG_AUTO = 400, ID_LANG_ADD, ID_LANG_FIRST,  // "Language": ID_LANG_FIRST + 0..63
     ID_MONITOR_ALL = 300, ID_MONITOR_MAIN, ID_MONITOR_FIRST,  // "Show the widget on": ID_MONITOR_FIRST + 0..31
     ID_DEVICE_FIRST = 1000
 };
 enum DeviceCmd : UINT {
-    DEV_TOGGLE, DEV_LEFT, DEV_RIGHT, DEV_RENAME, DEV_RESET_NAME, DEV_HISTORY,
+    DEV_TOGGLE, DEV_LEFT, DEV_RIGHT, DEV_RENAME, DEV_RESET_NAME,
     DEV_ALERT_FIRST = 6, DEV_ALERT_DEFAULT = DEV_ALERT_FIRST + 8, DEV_ALERT_OFF, DEV_STRIDE = 16
 };
 
@@ -72,11 +77,13 @@ bool g_wantWidget = true;      // user's choice: taskbar widget (default) or tra
 bool g_useWidget = false;      // what is actually shown right now
 bool g_hideLastKnown = false;  // hide (last known) / asleep devices from taskbar and tray
 bool g_showDisconnectedDevices = false;  // opt-in, explicit driver-reported offline devices only
-bool g_recordHistory = true;  // save readings for "Battery history..." (menu option, on by default)
 std::wstring g_widgetMonitor = L"all";  // which taskbars show the widget: "all", "main" or one monitor id
 bool g_widgetBackground = false;  // draw a plate behind the taskbar text (transparent taskbar themes)
 bool g_stacked = false;      // icon above the percentage (menu option)
 bool g_brandColors = false;  // off by default; known brands get their color (Razer green, Logitech blue, ...)
+unsigned g_hardwareMask = hardware::kAllMetrics;  // hardware readings after the batteries (taskbar widget only)
+hardware::Readings g_hardware;                     // latest values; -1 = not shown
+bool g_hardwareTimer = false;
 std::atomic<DWORD> g_pollIntervalMs{ 60 * 1000 };  // set from the menu, read by the worker thread
 
 struct TrayEntry {
@@ -174,6 +181,56 @@ void SaveHidden() {
 
 bool IsHidden(const std::wstring& key) { return g_hidden.count(key) != 0; }
 
+// A hidden HID device is not read at all: its USB ids go into PollOptions::skip, so no driver opens it.
+// Its ids and name are kept (REG_MULTI_SZ "PausedDevices", "key\tVID:PID\tname" per line) so it stays in
+// the menu, ready to be shown again, across restarts. A device that shares its receiver with a shown one
+// (two devices on one Logitech receiver) is still read, since skipping the receiver would stop both.
+struct PausedDevice {
+    USHORT vid = 0, pid = 0;
+    std::wstring name;
+};
+std::map<std::wstring, PausedDevice> g_paused;
+std::set<std::wstring> g_skipped;  // keys of hidden devices the poll skips right now
+
+void LoadPaused() {
+    DWORD size = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"PausedDevices", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS || !size)
+        return;
+    std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1, 0);
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"PausedDevices", RRF_RT_REG_MULTI_SZ, nullptr, buf.data(), &size) != ERROR_SUCCESS)
+        return;
+    for (const wchar_t* p = buf.data(); *p; p += wcslen(p) + 1) {
+        std::wstring line = p;
+        size_t t1 = line.find(L'\t'), t2 = t1 == std::wstring::npos ? t1 : line.find(L'\t', t1 + 1);
+        if (t2 == std::wstring::npos || t1 == 0) continue;
+        PausedDevice d;
+        d.vid = (USHORT)wcstoul(line.c_str() + t1 + 1, nullptr, 16);
+        size_t colon = line.find(L':', t1 + 1);
+        if (colon == std::wstring::npos || colon > t2) continue;
+        d.pid = (USHORT)wcstoul(line.c_str() + colon + 1, nullptr, 16);
+        d.name = line.substr(t2 + 1);
+        std::wstring key = line.substr(0, t1);
+        if (d.vid && d.pid && IsHidden(key)) g_paused[key] = d;
+    }
+}
+
+void SavePaused() {
+    std::wstring multi;
+    for (const auto& [key, d] : g_paused) {
+        wchar_t ids[16];
+        swprintf(ids, 16, L"%04X:%04X", d.vid, d.pid);
+        multi += key + L"\t" + ids + L"\t" + d.name;
+        multi.push_back(L'\0');
+    }
+    multi.push_back(L'\0');
+    RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"PausedDevices", REG_MULTI_SZ, multi.data(), (DWORD)(multi.size() * sizeof(wchar_t)));
+}
+
+// "Read batteries from" in the menu: a source that is off is never touched (see PollOptions).
+bool g_readBluetooth = true, g_readPhoneLink = true, g_readXInput = true, g_readHeadsetControl = true;
+SRWLOCK g_optionsLock = SRWLOCK_INIT;
+PollOptions g_pollOptions;  // guarded by g_optionsLock; copied by the worker before every poll
+
 // The user's left-to-right order (device keys), stored as a REG_MULTI_SZ. Devices not in it follow
 // in the default order (by type, then name).
 std::vector<std::wstring> g_order;
@@ -261,8 +318,6 @@ bool LoadHideLastKnown() { return LoadBoolSetting(L"HideLastKnownDevices", false
 void SaveHideLastKnown(bool on) { SaveBoolSetting(L"HideLastKnownDevices", on); }
 bool LoadShowDisconnectedDevices() { return LoadBoolSetting(L"ShowDisconnectedDevices", false); }
 void SaveShowDisconnectedDevices(bool on) { SaveBoolSetting(L"ShowDisconnectedDevices", on); }
-bool LoadRecordHistory() { return LoadBoolSetting(L"RecordBatteryHistory", true); }
-void SaveRecordHistory(bool on) { SaveBoolSetting(L"RecordBatteryHistory", on); }
 bool LoadWidgetBackground() { return LoadBoolSetting(L"WidgetBackground", false); }
 void SaveWidgetBackground(bool on) { SaveBoolSetting(L"WidgetBackground", on); }
 std::wstring LoadWidgetMonitor() {
@@ -284,6 +339,15 @@ bool LoadStacked() { return LoadBoolSetting(L"StackedLayout", false); }
 void SaveStacked(bool on) { SaveBoolSetting(L"StackedLayout", on); }
 bool LoadBrandColors() { return LoadBoolSetting(L"BrandColors", false); }
 void SaveBrandColors(bool on) { SaveBoolSetting(L"BrandColors", on); }
+unsigned LoadHardwareMask() {
+    DWORD v = hardware::kAllMetrics, sz = sizeof(v);
+    RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"HardwareReadings", RRF_RT_REG_DWORD, nullptr, &v, &sz);
+    return v & hardware::kAllMetrics;
+}
+void SaveHardwareMask(unsigned mask) {
+    DWORD v = mask;
+    RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"HardwareReadings", REG_DWORD, &v, sizeof(v));
+}
 DWORD LoadPollSeconds() {
     DWORD v = 60, sz = sizeof(v);
     RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"PollIntervalSeconds", RRF_RT_REG_DWORD, nullptr, &v, &sz);
@@ -573,6 +637,53 @@ std::vector<TrayEntry*> OrderedEntries(bool shownOnly) {
     return list;
 }
 
+// ---- hardware readings (CPU / GPU / RAM / VRAM usage, GPU and SSD temperature) ----------------------
+
+// Left to right on the taskbar; also the order in the menu.
+constexpr hardware::Metric kHardwareOrder[] = { hardware::Cpu, hardware::Gpu, hardware::GpuTemp,
+                                                hardware::Vram, hardware::Ram, hardware::SsdTemp };
+
+const wchar_t* HardwareName(hardware::Metric m) {  // menu item and tooltip line
+    switch (m) {
+        case hardware::Cpu:     return T(L"CPU usage");
+        case hardware::Gpu:     return T(L"GPU usage");
+        case hardware::GpuTemp: return T(L"GPU temperature");
+        case hardware::Vram:    return T(L"Video memory (VRAM) usage");
+        case hardware::Ram:     return T(L"RAM usage");
+        default:                return T(L"SSD temperature (Windows drive)");
+    }
+}
+
+const wchar_t* HardwareTag(hardware::Metric m) {  // short text in place of a device icon
+    switch (m) {
+        case hardware::Cpu:     return L"CPU";
+        case hardware::Gpu:
+        case hardware::GpuTemp: return L"GPU";
+        case hardware::Vram:    return L"VRAM";
+        case hardware::Ram:     return L"RAM";
+        default:                return L"SSD";
+    }
+}
+
+// Adds a widget item and a tooltip line for every switched-on reading that has a value.
+void AppendHardware(std::vector<WidgetItem>& items, std::wstring& tip) {
+    for (hardware::Metric m : kHardwareOrder) {
+        int v = g_hardware.value[m];
+        if (!(g_hardwareMask & hardware::Bit(m)) || v < 0) continue;
+        bool temperature = m == hardware::GpuTemp || m == hardware::SsdTemp;
+        WidgetItem it;
+        it.tag = HardwareTag(m);
+        it.text = std::to_wstring(v) + (temperature ? wchar_t(0x00B0) : L'%');  // 0x00B0: degree sign
+        if (temperature) {
+            auto heat = m == hardware::GpuTemp ? hardware_model::GpuHeat(v) : hardware_model::SsdHeat(v);
+            it.low = heat == hardware_model::Heat::Hot;    // red
+            it.warm = heat == hardware_model::Heat::Warm;  // orange
+        }
+        items.push_back(it);
+        tip += std::wstring(L"\n") + HardwareName(m) + L": " + it.text + (temperature ? L"C" : L"");
+    }
+}
+
 void UpdateWidget() {
     if (!g_useWidget) return;
     std::vector<TrayEntry*> list = OrderedEntries(true);
@@ -601,12 +712,44 @@ void UpdateWidget() {
         tip += DisplayName(*e) + L": " + StatusText(*e);
     }
     if (tip.empty()) tip = std::wstring(L"BatteryHub: ") + T(L"No devices with battery info found");
+    AppendHardware(items, tip);
     widget::SetItems(items, tip);
+}
+
+// Hands the worker what the next poll may read: the sources switched on, minus hidden devices.
+void UpdatePollOptions() {
+    PollOptions o;
+    o.bluetooth = g_readBluetooth;
+    o.phoneLink = g_readPhoneLink;
+    o.xinput = g_readXInput;
+    o.headsetControl = g_readHeadsetControl;
+    std::set<std::pair<USHORT, USHORT>> shownIds;  // receivers a shown device still needs
+    for (const auto& [key, e] : g_entries)
+        if (!IsHidden(key) && e.st.pid) shownIds.insert({ e.st.vid, e.st.pid });
+    g_skipped.clear();
+    for (const auto& [key, d] : g_paused) {
+        if (shownIds.count({ d.vid, d.pid })) continue;
+        g_skipped.insert(key);
+        if (std::find(o.skip.begin(), o.skip.end(), std::make_pair(d.vid, d.pid)) == o.skip.end()) o.skip.push_back({ d.vid, d.pid });
+    }
+    AcquireSRWLockExclusive(&g_optionsLock);
+    g_pollOptions = std::move(o);
+    ReleaseSRWLockExclusive(&g_optionsLock);
 }
 
 void OnResults(std::vector<DeviceStatus>& results) {
     std::map<std::wstring, bool> seen;
+    bool pausedChanged = false;
     for (auto& s : results) {
+        // A hidden device that was read (hidden before this build, or sharing a receiver): remember
+        // its USB ids so later polls can skip it.
+        if (IsHidden(s.key) && s.vid && s.pid) {
+            auto& d = g_paused[s.key];
+            if (d.vid != s.vid || d.pid != s.pid || d.name != s.name) {
+                d = { s.vid, s.pid, s.name };
+                pausedChanged = true;
+            }
+        }
         auto& e = g_entries[s.key];
         if (!e.uid) e.uid = StableId(s.key);
         e.st = s;
@@ -621,8 +764,6 @@ void OnResults(std::vector<DeviceStatus>& results) {
                       alerts::ShouldNotify(s, alerts::EffectiveThreshold(g_alertOverrides, s.key), e.lowWarned);
         g_alertLatches[s.key] = e.lowWarned;
         if (g_alertLatches.size() > 256) g_alertLatches.erase(g_alertLatches.begin());
-        if (g_recordHistory && s.connected && !s.asleep && s.percent >= 0)
-            battery_history::Observe(s.key, s.percent, s.charging);
         ApplyEntry(e);
         if (notify) ShowBatteryAlert(e);
     }
@@ -638,7 +779,8 @@ void OnResults(std::vector<DeviceStatus>& results) {
             e.st.asleep = true;
             ApplyEntry(e);
         }
-        if (!seen.count(it->first) && !inGrace) {
+        // Skipped (hidden) devices were not read on purpose: keep them so the menu can show them again.
+        if (!seen.count(it->first) && !inGrace && !g_skipped.count(it->first)) {
             if (it->second.added) TrayDelete(it->second.uid);
             if (it->second.icon) DestroyIcon(it->second.icon);
             it = g_entries.erase(it);
@@ -646,7 +788,31 @@ void OnResults(std::vector<DeviceStatus>& results) {
             ++it;
         }
     }
+    if (pausedChanged) SavePaused();
+    UpdatePollOptions();  // which receivers shown devices use may have changed
     UpdatePlaceholder();
+    UpdateWidget();
+}
+
+// Reads hardware only while the taskbar widget is showing and at least one reading is switched on.
+void ApplyHardware() {
+    bool active = g_useWidget && g_hardwareMask != 0;
+    hardware::Configure(active ? g_hardwareMask : 0);
+    if (active && !g_hardwareTimer) {  // values appear on the first tick, HARDWARE_MS from now
+        SetTimer(g_hwnd, TIMER_HARDWARE, HARDWARE_MS, nullptr);
+        g_hardwareTimer = true;
+    } else if (!active && g_hardwareTimer) {
+        KillTimer(g_hwnd, TIMER_HARDWARE);
+        g_hardwareTimer = false;
+        g_hardware = hardware::Readings{};
+    }
+}
+
+void ToggleHardwareMetric(hardware::Metric m) {
+    g_hardwareMask ^= hardware::Bit(m);
+    SaveHardwareMask(g_hardwareMask);
+    if (!(g_hardwareMask & hardware::Bit(m))) g_hardware.value[m] = -1;
+    ApplyHardware();
     UpdateWidget();
 }
 
@@ -665,6 +831,7 @@ void Reconcile() {
     } else if (g_useWidget) {
         widget::Reposition();
     }
+    ApplyHardware();
 }
 
 void SetMode(bool useWidget) {
@@ -745,12 +912,28 @@ void SetPollSeconds(DWORD seconds) {
 }
 
 void ToggleHidden(const std::wstring& key) {
-    if (!g_hidden.erase(key)) g_hidden.insert(key);
+    bool hide = !g_hidden.erase(key);
+    if (hide) g_hidden.insert(key);
     SaveHidden();
     auto it = g_entries.find(key);
+    if (hide && it != g_entries.end() && it->second.st.vid && it->second.st.pid) {
+        g_paused[key] = { it->second.st.vid, it->second.st.pid, it->second.st.name };
+        SavePaused();
+    } else if (!hide && g_paused.erase(key)) {
+        SavePaused();
+    }
+    UpdatePollOptions();
+    if (!hide) SetEvent(g_refreshEvt);  // read it again right away
     if (it != g_entries.end()) ApplyEntry(it->second);
     UpdatePlaceholder();
     UpdateWidget();
+}
+
+void ToggleSource(bool& source, const wchar_t* setting) {
+    source = !source;
+    SaveBoolSetting(setting, source);
+    UpdatePollOptions();
+    SetEvent(g_refreshEvt);  // poll now: a source switched off disappears, one switched on shows up
 }
 
 void RenameDevice(const std::wstring& key) {
@@ -843,14 +1026,22 @@ void ShowMenu() {
                         base + DEV_ALERT_FIRST + i, label.c_str());
         }
         AppendMenuW(sub, MF_POPUP, (UINT_PTR)alertMenu, T(L"Battery alerts"));
-        AppendMenuW(sub, MF_STRING, base + DEV_HISTORY, T(L"Battery history..."));
-        std::wstring line = DisplayName(*e) + L":  " + StatusText(*e) + L"   [" + T(e->st.via) + L"]";
+        std::wstring line = g_skipped.count(k) ? DisplayName(*e) + L":  " + T(L"not read while hidden")
+                                               : DisplayName(*e) + L":  " + StatusText(*e) + L"   [" + T(e->st.via) + L"]";
         AppendMenuW(m, MF_POPUP | (IsHidden(k) ? 0 : MF_CHECKED), (UINT_PTR)sub, line.c_str());
         keys.push_back(k);
     }
     AppendMenuW(m, MF_STRING | (g_hideLastKnown ? MF_CHECKED : 0), ID_HIDE_LAST_KNOWN, T(L"Hide last known / asleep devices"));
     AppendMenuW(m, MF_STRING | (g_showDisconnectedDevices ? MF_CHECKED : 0), ID_SHOW_DISCONNECTED, T(L"Show disconnected devices"));
-    AppendMenuW(m, MF_STRING | (g_recordHistory ? MF_CHECKED : 0), ID_RECORD_HISTORY, T(L"Record battery history"));
+    {
+        HMENU sub = CreatePopupMenu();
+        AppendMenuW(sub, MF_STRING | (g_readBluetooth ? MF_CHECKED : 0), ID_SOURCE_BLUETOOTH, T(L"Bluetooth devices and earbuds"));
+        AppendMenuW(sub, MF_STRING | (g_readPhoneLink ? MF_CHECKED : 0), ID_SOURCE_PHONE_LINK, T(L"Phone (Microsoft Phone Link)"));
+        AppendMenuW(sub, MF_STRING | (g_readXInput ? MF_CHECKED : 0), ID_SOURCE_XINPUT, T(L"Xbox controllers"));
+        AppendMenuW(sub, MF_STRING | (g_readHeadsetControl ? MF_CHECKED : 0), ID_SOURCE_HEADSETCONTROL,
+                    T(L"HeadsetControl (more headsets)"));
+        AppendMenuW(m, MF_POPUP, (UINT_PTR)sub, T(L"Read batteries from"));
+    }
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING | (g_wantWidget ? MF_CHECKED : 0), ID_MODE_WIDGET, T(L"Show on the taskbar (icon + percentage)"));
     AppendMenuW(m, MF_STRING | (!g_wantWidget ? MF_CHECKED : 0), ID_MODE_TRAY, T(L"Show as tray icons"));
@@ -880,6 +1071,13 @@ void ShowMenu() {
         AppendMenuW(m, MF_POPUP | (g_wantWidget ? 0 : MF_GRAYED), (UINT_PTR)sub, T(L"Show the widget on"));
     }
     AppendMenuW(m, MF_STRING | (g_brandColors ? MF_CHECKED : 0), ID_BRAND_COLORS, T(L"Brand colors (Razer green, Logitech blue, ...)"));
+    {
+        HMENU sub = CreatePopupMenu();
+        for (hardware::Metric hm : kHardwareOrder)
+            AppendMenuW(sub, MF_STRING | ((g_hardwareMask & hardware::Bit(hm)) ? MF_CHECKED : 0) | (g_wantWidget ? 0 : MF_GRAYED),
+                        ID_HARDWARE_FIRST + hm, HardwareName(hm));
+        AppendMenuW(m, MF_POPUP | (g_wantWidget ? 0 : MF_GRAYED), (UINT_PTR)sub, T(L"Hardware on the taskbar"));
+    }
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Language: automatic, every built-in or user-added language (in its own name), and a way to add one.
     i18n::Init();  // picks up language files added since the last time
@@ -936,7 +1134,10 @@ void ShowMenu() {
         case ID_AUTOSTART: SetAutostart(!AutostartEnabled()); break;
         case ID_HIDE_LAST_KNOWN: SetHideLastKnown(!g_hideLastKnown); break;
         case ID_SHOW_DISCONNECTED: SetShowDisconnectedDevices(!g_showDisconnectedDevices); break;
-        case ID_RECORD_HISTORY: g_recordHistory = !g_recordHistory; SaveRecordHistory(g_recordHistory); break;
+        case ID_SOURCE_BLUETOOTH: ToggleSource(g_readBluetooth, L"ReadBluetooth"); break;
+        case ID_SOURCE_PHONE_LINK: ToggleSource(g_readPhoneLink, L"ReadPhoneLink"); break;
+        case ID_SOURCE_XINPUT: ToggleSource(g_readXInput, L"ReadXInput"); break;
+        case ID_SOURCE_HEADSETCONTROL: ToggleSource(g_readHeadsetControl, L"ReadHeadsetControl"); break;
         case ID_WIDGET_BACKGROUND: SetWidgetBackground(!g_widgetBackground); break;
         case ID_MONITOR_ALL: SetWidgetMonitor(L"all"); break;
         case ID_LANG_AUTO: SetLanguage(L""); break;
@@ -954,6 +1155,8 @@ void ShowMenu() {
         default:
             if (cmd >= ID_POLL_FIRST && cmd < ID_POLL_FIRST + ARRAYSIZE(POLL_SECONDS)) {
                 SetPollSeconds(POLL_SECONDS[cmd - ID_POLL_FIRST]);
+            } else if (cmd >= ID_HARDWARE_FIRST && cmd < ID_HARDWARE_FIRST + hardware::MetricCount) {
+                ToggleHardwareMetric(static_cast<hardware::Metric>(cmd - ID_HARDWARE_FIRST));
             } else if (cmd >= ID_LANG_FIRST && cmd < ID_LANG_FIRST + languages.size()) {
                 SetLanguage(languages[cmd - ID_LANG_FIRST].code);
             } else if (cmd >= ID_MONITOR_FIRST && cmd < ID_MONITOR_FIRST + monitors.size()) {
@@ -968,12 +1171,6 @@ void ShowMenu() {
                     case DEV_RESET_NAME: ResetDeviceName(key); break;
                     case DEV_ALERT_DEFAULT: SetAlertOverride(key, alerts::kUseDefault); break;
                     case DEV_ALERT_OFF: SetAlertOverride(key, alerts::kDisabled); break;
-                    case DEV_HISTORY: {
-                        auto it = g_entries.find(key);
-                        if (it != g_entries.end())
-                            battery_history::Show(g_hwnd, key, DisplayName(it->second));
-                        break;
-                    }
                     default: {
                         UINT slot = (cmd - ID_DEVICE_FIRST) % DEV_STRIDE;
                         if (slot >= DEV_ALERT_FIRST && slot < DEV_ALERT_FIRST + alerts::kThresholdCount)
@@ -1035,7 +1232,10 @@ DWORD WINAPI Worker(LPVOID) {
     size_t startupPoll = 0;
     HANDLE events[2] = { g_stopEvt, g_refreshEvt };
     for (;;) {
-        auto* v = new std::vector<DeviceStatus>(g_demo ? DemoDevices() : PollAllDevices());
+        AcquireSRWLockShared(&g_optionsLock);
+        PollOptions options = g_pollOptions;
+        ReleaseSRWLockShared(&g_optionsLock);
+        auto* v = new std::vector<DeviceStatus>(g_demo ? DemoDevices() : PollDevices(options));
         if (!PostMessageW(g_hwnd, WM_RESULTS, 0, (LPARAM)v)) delete v;
         DWORD delay = g_pollIntervalMs;
         if (startupPoll < ARRAYSIZE(startupPollDelays)) delay = startupPollDelays[startupPoll++];
@@ -1084,6 +1284,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_TIMER:
             if (wp == TIMER_DEBOUNCE) { KillTimer(h, TIMER_DEBOUNCE); SetEvent(g_refreshEvt); }
             if (wp == TIMER_WIDGET) { Reconcile(); updates::Tick(h); }
+            if (wp == TIMER_HARDWARE && hardware::Sample(g_hardware)) UpdateWidget();
             if (wp == TIMER_ALERT_ICON) {
                 KillTimer(h, TIMER_ALERT_ICON);
                 if (g_alertIconAdded) { TrayDelete(ALERT_ICON_ID); g_alertIconAdded = false; }
@@ -1099,6 +1300,9 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             updates::Shutdown();
             KillTimer(h, TIMER_WIDGET);
             KillTimer(h, TIMER_ALERT_ICON);
+            KillTimer(h, TIMER_HARDWARE);
+            g_hardwareTimer = false;
+            hardware::Shutdown();
             if (g_alertIconAdded) { TrayDelete(ALERT_ICON_ID); g_alertIconAdded = false; }
             widget::Destroy();
             SetEvent(g_stopEvt);
@@ -1265,10 +1469,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     g_wantWidget = LoadWidgetMode();
     g_hideLastKnown = LoadHideLastKnown();
     g_showDisconnectedDevices = LoadShowDisconnectedDevices();
-    g_recordHistory = LoadRecordHistory();
     g_widgetBackground = LoadWidgetBackground();
     g_brandColors = LoadBrandColors();
     g_stacked = LoadStacked();
+    g_hardwareMask = LoadHardwareMask();
     g_pollIntervalMs = LoadPollSeconds() * 1000;
     widget::SetStacked(g_stacked);
     widget::SetBackground(g_widgetBackground);  // remembered by the widget across re-creation
@@ -1276,10 +1480,23 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     g_widgetMonitor = LoadWidgetMonitor();
     widget::SetMonitorChoice(g_widgetMonitor);
     LoadHidden();
+    LoadPaused();
+    for (const auto& [key, d] : g_paused) {  // listed in the menu without being read
+        auto& e = g_entries[key];
+        e.uid = StableId(key);
+        e.st.key = key;
+        e.st.name = d.name;
+        e.st.vid = d.vid;
+        e.st.pid = d.pid;
+    }
+    g_readBluetooth = LoadBoolSetting(L"ReadBluetooth", true);
+    g_readPhoneLink = LoadBoolSetting(L"ReadPhoneLink", true);
+    g_readXInput = LoadBoolSetting(L"ReadXInput", true);
+    g_readHeadsetControl = LoadBoolSetting(L"ReadHeadsetControl", true);
+    UpdatePollOptions();  // before the worker's first poll
     LoadOrder();
     LoadAliases();
     LoadAlertThresholds();
-    battery_history::Initialize(g_demo);
     Reconcile();
     UpdatePlaceholder();  // something to click on until the first poll finishes
     SetTimer(g_hwnd, TIMER_WIDGET, 1000, nullptr);

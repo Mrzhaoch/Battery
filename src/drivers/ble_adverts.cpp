@@ -191,10 +191,26 @@ struct ReceivedHandler : IUnknown {
 
 ReceivedHandler g_handler;
 IWatcher* g_watcher = nullptr;
+EventRegistrationToken g_token{};
+bool g_wanted = false;  // a driver asked for the watcher during the current poll
 
 }  // namespace
 
+void BeginBlePoll() { g_wanted = false; }
+
+void EndBlePoll() {
+    if (!g_wanted) StopBleWatcher();
+}
+
+void StopBleWatcher() {
+    if (!g_watcher) return;
+    g_watcher->remove_Received(g_token);  // the handler is static, so a callback still in flight is safe
+    g_watcher->Stop();
+    Release(g_watcher);
+}
+
 bool EnsureBleWatcher() {
+    g_wanted = true;
     if (!g_watcher) {
         RoInitialize(RO_INIT_MULTITHREADED);  // our poll thread; harmless if already initialised
         const wchar_t* cls = L"Windows.Devices.Bluetooth.Advertisement.BluetoothLEAdvertisementWatcher";
@@ -208,8 +224,7 @@ bool EnsureBleWatcher() {
         obj->QueryInterface(IID_Watcher, (void**)&g_watcher);
         obj->Release();
         if (!g_watcher) return false;
-        EventRegistrationToken tok;
-        if (FAILED(g_watcher->add_Received(&g_handler, &tok))) {
+        if (FAILED(g_watcher->add_Received(&g_handler, &g_token))) {
             Release(g_watcher);
             return false;
         }

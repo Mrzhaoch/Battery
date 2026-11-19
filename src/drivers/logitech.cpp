@@ -298,6 +298,8 @@ bool PollLogitechDevice(PollContext& ctx, USHORT pid, const std::vector<const Hi
         }
         if (found) {
             if (s.kind == DeviceKind::Other) s.kind = GuessKind(s.name);
+            if (!s.vid) s.vid = 0x046D;
+            s.pid = pid;  // lets a hidden device be skipped (main.cpp)
             ctx.out.push_back(s);
             any = true;
         }

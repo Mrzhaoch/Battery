@@ -104,6 +104,8 @@ void PollRongyuan(PollContext& ctx) {
                 }
 
                 if (level >= 1 && level <= 100) s.percent = level;
+                s.vid = vid;
+                s.pid = pid;  // lets a hidden device be skipped (main.cpp)
                 ctx.out.push_back(s);
                 any = true;
             }

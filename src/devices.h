@@ -20,10 +20,23 @@ struct DeviceStatus {
     int  millivolts = 0;       // battery voltage when reported (0 = unknown)
     int  graceSec   = 0;       // keep showing the last value this long if the device stops answering
     unsigned short vid = 0;    // USB / Bluetooth HID vendor id when known (picks the brand color)
+    unsigned short pid = 0;    // HID product id of the collection the driver read (0 = not a HID device)
 };
 
 // Queries every supported device. Blocking (can take a second or two); call from a worker thread.
 std::vector<DeviceStatus> PollAllDevices();
+
+// What a poll may read (Windows). A source that is off is not touched at all: no device opened, no
+// program run, no Bluetooth scan.
+struct PollOptions {
+    bool bluetooth = true;       // Bluetooth devices: Windows' levels, AirPods / Fast Pair broadcasts,
+                                 // Galaxy Buds, Nothing Ear, GameSir over BLE, and every Bluetooth HID device
+    bool phoneLink = true;       // the phone's battery from Microsoft Phone Link
+    bool xinput = true;          // Xbox / XInput controllers
+    bool headsetControl = true;  // runs headsetcontrol.exe (when installed) for extra headsets
+    std::vector<std::pair<unsigned short, unsigned short>> skip;  // VID:PID never opened (hidden devices)
+};
+std::vector<DeviceStatus> PollDevices(const PollOptions& options);
 
 // Prints every HID collection (for adding support for new devices).
 std::wstring DumpHidCollections();
