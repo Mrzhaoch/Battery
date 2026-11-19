@@ -18,7 +18,26 @@ powershell -ExecutionPolicy Bypass -File scripts\new-release-key.ps1
   If either is lost, the installed apps can no longer update themselves: you would create a new
   key and every user would have to install one release by hand.
 
-## Every release
+## Every release: one command
+
+From an up-to-date, clean `main` whose CI has passed:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -Version 1.2.3 [-NotesFile notes.md]
+```
+
+It tags `main`, pushes the tag, waits for CI to build, test and publish the release (about 10
+minutes), checks `SHA256SUMS.txt` against the SHA-256 GitHub reports for each file, signs it, checks the
+signature against the key in `src\update_public_key.h`, uploads `SHA256SUMS.txt.sig` and sets the title
+(and, with `-NotesFile`, the notes). The version comes from the tag; no file needs a version bump.
+
+The key password is asked for, unless `%USERPROFILE%\.wirelessbattery\release-key.pass` exists: then it is
+read from there (a plain-text file you create yourself, like Mora's release flow). Anyone who can read
+both that file and the key file can sign releases, so keep them private and backed up.
+
+## Every release: by hand
+
+The same steps, if the script cannot be used:
 
 1. Push a version tag (`git tag v1.2.3 && git push origin v1.2.3`). CI builds the setup, the
    portable zip and `SHA256SUMS.txt`, and publishes the release.

@@ -46,7 +46,7 @@ foreach ($line in $text -split "`n") {
 Write-Host ''
 Write-Host $text
 if (-not $Yes) {
-    $answer = Read-Host "Sign this list for version $Version? Only do this for a release you published (y/n)"
+    $answer = Read-Host "Sign this list for version ${Version}? Only do this for a release you published (y/n)"
     if ($answer -ne 'y') { Write-Host 'Not signed.'; exit 1 }
 }
 if (-not $Password) { $Password = Read-Host 'Key password' -AsSecureString }

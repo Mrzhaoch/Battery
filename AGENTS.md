@@ -9,7 +9,9 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 ## Fork
 
 - Remote `upstream` = the original (push disabled). Sync by merging `upstream/main` into an
-  `ai/` branch; never rewrite upstream history.
+  `ai/` branch; never rewrite upstream history. `.github/upstream-version` records the BatteryHub
+  release last merged; `upstream-watch.yml` opens one issue when its daily check finds a newer
+  one (never merges). After a sync, bump that file and close the issue.
 - Fork-only changes: charging / full shows as a green level-filled upright battery glyph (Segoe
   Fluent F5F2-F5FC; horizontal E850 set on Windows 10), not upstream's
   bolt / check (`src/widget.cpp` `BatteryGlyph`, menu *Show charging*, registry `ShowCharging`;
@@ -77,4 +79,5 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 ## Release facts
 
 Pushing a `v*` tag makes GitHub Actions publish the installer, portable zip and HeadsetControl
-source. Releases need Zek's explicit request.
+source. Releases need Zek's explicit request. Use `scripts\release.ps1 -Version x.y.z` (tag, wait for
+CI, check sums, sign, upload signature; docs/releasing.md); signing needs Zek's key password.

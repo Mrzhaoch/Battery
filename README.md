@@ -39,6 +39,10 @@ unsupported devices there with a `--dump`
 ([open an issue](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/issues/new)); issues
 here are only for what this fork changes.
 
+**Keeping up with BatteryHub:** once a day a GitHub Action checks BatteryHub's latest release and, when
+it is newer than the one this fork last merged (`.github/upstream-version`), opens an issue here. It
+never merges anything; each BatteryHub release is merged by hand, checked by CI, then released here.
+
 - **Small**: plain C++/Win32, no runtime and no background service, installs without admin rights.
 - **No vendor software needed**: it talks to the devices directly. G HUB, Synapse, iCUE, GG and NGenuity can stay closed (or keep running; they don't conflict).
 - **Many brands**: Logitech, Razer, SteelSeries, Corsair, HyperX, Glorious, Jabra, JBL, PlayStation and Xbox controllers, Samsung Galaxy Buds, any Bluetooth device Windows knows a battery level for, and every headset the bundled [HeadsetControl](https://github.com/Sapd/HeadsetControl) supports.

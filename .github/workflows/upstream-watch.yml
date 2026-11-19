@@ -1,0 +1,54 @@
+name: BatteryHub release watch
+
+# Once a day, look at BatteryHub's latest release. When it is newer than the version this fork last merged
+# (.github/upstream-version), open one issue about it. Nothing is ever merged or changed here: bringing an
+# upstream release in stays a manual step (merge into an ai/ branch, let CI pass, then bump the file).
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to exact commits so a moved tag cannot swap in different code.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: .github/upstream-version
+          sparse-checkout-cone-mode: false
+
+      - name: Open an issue for a newer BatteryHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM: krisgfx9/Wireless-Device-Battery-Monitor
+        run: |
+          set -euo pipefail
+          merged=$(tr -d '[:space:]' < .github/upstream-version)
+          latest=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+          echo "Last merged: $merged. BatteryHub's latest release: $latest."
+          [ "$latest" = "$merged" ] && exit 0
+          # Only a newer vX.Y.Z counts (sort -V); an older or odd tag marked latest is ignored.
+          newest=$(printf '%s\n%s\n' "${merged#v}" "${latest#v}" | sort -V | tail -n 1)
+          [ "$newest" = "${latest#v}" ] || exit 0
+          title="BatteryHub $latest released upstream"
+          if gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title \"$title\"" --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo "Already reported."
+            exit 0
+          fi
+          url=$(gh api "repos/$UPSTREAM/releases/latest" --jq .html_url)
+          ahead=$(gh api "repos/$UPSTREAM/compare/$merged...$latest" --jq .total_commits)
+          {
+            echo "BatteryHub **$latest** is out: $url"
+            echo
+            echo "This fork last merged **$merged**; $ahead BatteryHub commits are new since then."
+            echo
+            echo "Nothing has been merged. To bring it in: merge \`upstream/main\` (or the \`$latest\` tag) into an"
+            echo "\`ai/\` branch, keep this fork's changes where they conflict (see AGENTS.md), let CI pass, merge"
+            echo "into main, set \`.github/upstream-version\` to \`$latest\`, and close this issue."
+          } > body.md
+          gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
