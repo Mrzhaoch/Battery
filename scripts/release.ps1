@@ -36,7 +36,7 @@ Invoke-Git fetch -q origin --tags
 $head = Invoke-Git rev-parse HEAD
 if ($head -ne (Invoke-Git rev-parse origin/main)) { throw 'Local main differs from GitHub main: pull or push first.' }
 if (Invoke-Git tag --list $tag) { throw "Tag $tag already exists." }
-$ci = Invoke-Gh run list -R $repo -b main -c $head -w build -L 1 --json conclusion,status | ConvertFrom-Json
+$ci = Invoke-Gh run list -R $repo -b main -c $head -w build -L 1 --json 'conclusion,status' | ConvertFrom-Json  # quoted: a bare a,b is an array in PowerShell
 if (-not $ci -or $ci[0].conclusion -ne 'success') { throw "CI for main ($($head.Substring(0,7))) has not passed yet; wait for it, then run this again." }
 Write-Host "main $($head.Substring(0,7)) is clean, pushed and its CI passed."
 
