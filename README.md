@@ -264,9 +264,7 @@ Also hardware-tested: RAWM Leviathan V4 (RAWM HS Receiver `1915:2346`; battery l
 
 ## Install
 
-This fork has no published release yet: [build it from source](#build), or use
-[BatteryHub's releases](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor/releases/latest)
-(the original app, without this fork's changes). Once this fork publishes releases:
+[![Latest release](https://img.shields.io/github/v/release/ahizechi/Battery?label=latest%20release&style=for-the-badge)](https://github.com/ahizechi/Battery/releases/latest)
 
 1. Download **`BatteryHub-Setup-<version>.exe`** from [this fork's latest release](https://github.com/ahizechi/Battery/releases/latest).
 2. Run it and click through. It needs **no administrator rights** and **nothing else installed**: no
