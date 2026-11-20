@@ -25,7 +25,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/pr.diff"
+        # GitHub refuses diffs over 20,000 lines (an upstream merge, for example): say so plainly and
+        # fail, so the pull request is still reviewed by hand instead of passing unscanned.
+        run: |
+          if ! gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/pr.diff" 2> "$RUNNER_TEMP/diff.err"; then
+            cat "$RUNNER_TEMP/diff.err"
+            if grep -q 'too_large\|exceeded the maximum' "$RUNNER_TEMP/diff.err"; then
+              {
+                echo "## Too large to scan"
+                echo
+                echo "GitHub will not return a diff this large (over 20,000 lines), so it was not scanned."
+                echo "Review the changes by hand, or split the pull request."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 1
+          fi
       - name: Scan for red flags
         run: bash scripts/pr-safety.sh "$RUNNER_TEMP/pr.diff"
       # AI tools add "Co-authored-by: Claude ..." to commit messages, which lists the AI as a repo

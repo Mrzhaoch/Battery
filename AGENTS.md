@@ -74,7 +74,10 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
 - 4-space indent, about 120-column lines, keep the binary small.
 - Commit messages must not contain `Co-authored-by` lines crediting AI tools: the PR safety check
   fails on them.
-- Local release builds go in the ignored `dist\` folder (1.0.6 installer kept there).
+- Local release builds go in the ignored `dist\` folder (empty; releases come from CI).
+- Public repo: secret scanning + push protection, private vulnerability reporting (SECURITY.md) and
+  rulesets "Protect main" / "Protect release tags" (no deletion or force-push) are on. Device
+  requests go to BatteryHub (issue template contact link).
 
 ## Release facts
 

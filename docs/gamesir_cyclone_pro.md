@@ -31,7 +31,7 @@ Reply layout:
 ```
 
 Byte 18 is the battery in percent (0-100), or `FF` while charging. No level is reported while it
-charges, so the last known percentage is kept and shown with the charging bolt.
+charges, so the last known percentage is kept and shown as charging.
 
 The pad also has service `0xFF10`, which is GameSir's firmware-update channel. The driver never opens
 it. The pad has no standard Battery Service (`0x180F`), which is why Windows' Bluetooth page and
