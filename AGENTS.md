@@ -12,6 +12,10 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
   `ai/` branch; never rewrite upstream history. `.github/upstream-version` records the BatteryHub
   release last merged; `upstream-watch.yml` opens one issue when its daily check finds a newer
   one (never merges). After a sync, bump that file and close the issue.
+- README.md is short, in Mora's style (Zek, 20 Nov 2026). BatteryHub's README content lives in
+  docs/devices.md (supported devices), docs/guide.md (options, alerts, updates, CLI, build, Linux,
+  translations) and docs/credits.md (protocol credits). On a README conflict in a sync keep ours, and
+  copy BatteryHub's README changes into the matching docs file (links there are relative to docs/).
 - Fork-only changes: an Apple-style level bar under every battery percentage (text colour, green
   charging / full, red low; number stays text colour), not upstream's bolt / check
   (`src/widget.cpp` `Capsule`, menu *Show charging (green bar)*, registry `ShowCharging`;
