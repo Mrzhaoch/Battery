@@ -86,7 +86,7 @@ std::wstring g_widgetMonitor = L"all";  // which taskbars show the widget: "all"
 bool g_widgetBackground = false;  // draw a plate behind the taskbar text (transparent taskbar themes)
 bool g_stacked = false;      // icon above the percentage (menu option)
 bool g_brandColors = false;  // off by default; known brands get their color (Razer green, Logitech blue, ...)
-bool g_showCharging = true;  // battery symbol on the taskbar and the blue tray bar while charging (menu option)
+bool g_showCharging = true;  // green level bar on the taskbar and the blue tray bar while charging (menu option)
 unsigned g_hardwareMask = 0;  // hardware readings after the batteries (taskbar widget only); off by default
 UINT g_hardwareSeconds = HARDWARE_DEFAULT_SECONDS;
 bool g_displayOn = true;  // hardware readings pause while the display is off (Windows tells us)
@@ -1099,7 +1099,7 @@ void ShowMenu() {
         AppendMenuW(m, MF_POPUP | (g_wantWidget ? 0 : MF_GRAYED), (UINT_PTR)sub, T(L"Show the widget on"));
     }
     AppendMenuW(m, MF_STRING | (g_brandColors ? MF_CHECKED : 0), ID_BRAND_COLORS, T(L"Brand colors (Razer green, Logitech blue, ...)"));
-    AppendMenuW(m, MF_STRING | (g_showCharging ? MF_CHECKED : 0), ID_SHOW_CHARGING, T(L"Show charging (battery symbol)"));
+    AppendMenuW(m, MF_STRING | (g_showCharging ? MF_CHECKED : 0), ID_SHOW_CHARGING, T(L"Show charging (green bar)"));
     {
         HMENU sub = CreatePopupMenu();
         for (hardware::Metric hm : kHardwareOrder)

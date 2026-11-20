@@ -6,6 +6,7 @@
 #include <uiautomation.h>
 #include <algorithm>
 #include <climits>
+#include <cmath>
 
 namespace {
 
@@ -14,7 +15,7 @@ UINT g_clickMsg;
 bool g_light, g_hover;
 bool g_background;  // opaque rounded plate behind the text, for transparent / restyled taskbars
 bool g_stacked;     // icon above the percentage (menu option, PR #525)
-bool g_showCharging = true;  // battery symbol after a charging / full device (menu option, Zek's fork)
+bool g_showCharging = true;  // green level bar while charging / full on power (menu option, Zek's fork)
 bool g_vertical;    // the primary taskbar is docked left or right: one block per device, stacked (PR #321)
 std::vector<WidgetItem> g_items;
 std::wstring g_tipText;
@@ -260,32 +261,6 @@ constexpr wchar_t kBatteryUnknown = 0xE996;  // shown when there is nothing to d
 // Creates a font, falling back when the preferred face is not installed (GDI would silently substitute).
 HFONT MakeFont(int px, int weight, const wchar_t* face, const wchar_t* fallback, int fallbackPx = 0);
 
-// Zek's fork: a charging (or full, on power) device gets a small upright battery after its number, filled to
-// its level, instead of upstream's lightning bolt / check mark. Windows 11's Segoe Fluent Icons has it in 11
-// steps, VerticalBattery0 F5F2 ... VerticalBattery10 F5FC. Windows 10's Segoe MDL2 Assets has no upright set,
-// so there the horizontal one is used: Battery0 E850 ... Battery9 E859, Battery10 E83F.
-bool HasFluentIcons() {
-    static int has = -1;
-    if (has < 0) {
-        HFONT f = MakeFont(16, FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
-        HDC dc = CreateCompatibleDC(nullptr);
-        HGDIOBJ o = SelectObject(dc, f);
-        wchar_t got[LF_FACESIZE] = {};
-        GetTextFaceW(dc, LF_FACESIZE, got);
-        SelectObject(dc, o);
-        DeleteDC(dc);
-        DeleteObject(f);
-        has = !_wcsicmp(got, L"Segoe Fluent Icons") ? 1 : 0;
-    }
-    return has == 1;
-}
-
-wchar_t BatteryGlyph(int pct) {
-    int step = pct < 0 ? 10 : std::clamp((pct + 5) / 10, 0, 10);
-    if (HasFluentIcons()) return (wchar_t)(0xF5F2 + step);
-    return step == 10 ? (wchar_t)0xE83F : (wchar_t)(0xE850 + step);
-}
-
 HFONT MakeFont(int px, int weight, const wchar_t* face, const wchar_t* fallback, int fallbackPx) {
     for (const wchar_t* f : { face, fallback }) {
         int h_px = (f == fallback && fallbackPx > 0) ? fallbackPx : px;
@@ -401,6 +376,20 @@ Mask Halo(const Mask& m, int r) {
     return g;
 }
 
+// A horizontal bar with round ends (radius h / 2), anti-aliased: the Apple-style battery level bar.
+void Capsule(Canvas& cv, int x, int y, int w, int h, Rgb c, int alpha) {
+    if (w <= 0 || h <= 0 || alpha <= 0) return;
+    const double r = h / 2.0, cy = y + r;
+    const double left = x + r, right = std::max(left, x + w - r);  // centres of the two end caps
+    for (int yy = y; yy < y + h; yy++)
+        for (int xx = x; xx < x + w; xx++) {
+            double px = xx + 0.5, py = yy + 0.5;
+            double dx = px < left ? left - px : (px > right ? px - right : 0.0), dy = py - cy;
+            double cover = std::clamp(r - std::sqrt(dx * dx + dy * dy) + 0.5, 0.0, 1.0);
+            if (cover > 0) cv.Blend(xx, yy, c, (int)(alpha * cover + 0.5));
+        }
+}
+
 // One drawn piece of the strip. Normal pieces follow each other from left to right. A piece with an
 // `anchor` (index of an earlier piece) is a caption: drawn over that piece, `bx`/`by` from its top-left
 // corner, and taking no room of its own. Branded devices add a glow behind the glyph and a level bar.
@@ -431,7 +420,6 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     Rgb orange = g_light ? Rgb{ 188, 75, 0 } : Rgb{ 255, 160, 70 };  // hardware temperature warning
     HFONT tagFont = MakeFont(Px(10), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // "CPU", "GPU", ...
     HFONT icons = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
-    HFONT bolt = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");  // the battery symbol
     HFONT text = MakeFont(Px(13), FW_NORMAL, L"Segoe UI Variable Text", L"Segoe UI", Px(12));
     HFONT caption = MakeFont(std::max(8, Px(7)), FW_SEMIBOLD, L"Segoe UI Variable Text", L"Segoe UI");  // never under 8 px
 
@@ -442,9 +430,11 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     for (size_t i = 0; i < g_items.size(); i++) {
         const auto& it = g_items[i];
         int a = it.dim ? 120 : 255;
-        Rgb tc = it.low ? red : it.warm ? orange : fg;
-        // Zek's fork: a green battery symbol while charging or full on power ("Show charging" in the menu).
-        bool mark = g_showCharging && it.tag.empty() && (it.charging || it.full);
+        bool battery = it.tag.empty();
+        // Zek's fork: a battery's number stays in the text colour; its level bar carries the state.
+        // Hardware readings keep their orange / red temperature text.
+        Rgb tc = battery ? fg : it.low ? red : it.warm ? orange : fg;
+        const bool mark = false;  // no symbol beside the number any more (the bar shows charging)
         size_t glyph = out.size();
         slots.push_back({ (int)glyph, (int)glyph + 1, mark ? (int)glyph + 2 : -1 });
         bool branded = it.accent != Accent::None;
@@ -461,13 +451,17 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
         }
         out.push_back(std::move(icon));
         std::wstring t = !it.text.empty() ? it.text : it.percent >= 0 ? std::to_wstring(it.percent) + L"%" : L"?";
-        Piece label{ RenderMask(t, text, g_light), tc, a, mark ? Px(3) : 0 };
-        if (branded && it.percent >= 0) {
-            label.barPct = it.percent;
-            label.barColor = it.low ? red : accent;
+        Piece label{ RenderMask(t, text, g_light), tc, a, 0 };
+        // Zek's fork: an Apple-style level bar under every battery's number (variant A of the mockup):
+        // text colour normally (or the brand colour with Brand colors on), green while charging or full on
+        // power ("Show charging"), red when low.
+        if (battery && it.percent >= 0) {
+            label.barPct = it.full ? 100 : it.percent;
+            label.barColor = it.low ? red
+                           : (g_showCharging && (it.charging || it.full)) ? green
+                           : branded ? accent : fg;
         }
         out.push_back(std::move(label));
-        if (mark) out.push_back({ RenderMask(std::wstring(1, BatteryGlyph(it.full ? 100 : it.percent)), bolt, g_light), green, a, 0 });
         out.back().gapAfter = i + 1 < g_items.size() ? Px(14) : 0;
         if (!it.label.empty()) {  // tiny caption in the bottom-right corner of the icon
             Piece c{ RenderMask(it.label, caption, g_light), fg, a, 0 };
@@ -479,7 +473,6 @@ std::vector<Piece> Layout(int barW, int barH, int& width, int& height) {
     }
     DeleteObject(icons);
     DeleteObject(tagFont);
-    DeleteObject(bolt);
     DeleteObject(text);
     DeleteObject(caption);
 
@@ -578,15 +571,14 @@ void PaintStrip(HWND wnd, HWND taskbar, bool hover, SIZE& size) {
             ys[i] = fixed ? p.py : (H - p.m.h) / 2;
             if (p.haloR) cv.Draw(p.halo, xs[i] - p.haloR, ys[i] - p.haloR, p.color, p.haloAlpha * p.alpha / 255);
             if (p.barPct >= 0) {
-                // The bar spans the text's width, like Synapse's battery bar; in the row layout text and bar
-                // are centred together.
-                int bh = std::max(2, Px(2)), gap = Px(3);
+                // Apple-style level bar under the number, as wide as the number, with round ends: a faint
+                // track and the filled part on top. In the row layout text and bar are centred together.
+                int bh = std::max(2, Px(3)), gap = Px(2);
                 if (!fixed) ys[i] = (H - (p.m.h + gap + bh)) / 2;
                 int by = ys[i] + p.m.h + gap;
-                int fill = std::max(p.barPct > 0 ? 1 : 0, (p.barPct * p.m.w + 50) / 100);
-                for (int yy = by; yy < by + bh; yy++)
-                    for (int xx = 0; xx < p.m.w; xx++)
-                        cv.Blend(xs[i] + xx, yy, xx < fill ? p.barColor : track, xx < fill ? p.alpha : 45 * p.alpha / 255);
+                int fill = p.barPct <= 0 ? 0 : std::max(bh, (p.barPct * p.m.w + 50) / 100);  // never thinner than round
+                Capsule(cv, xs[i], by, p.m.w, bh, track, (g_light ? 40 : 56) * p.alpha / 255);
+                if (fill) Capsule(cv, xs[i], by, std::min(fill, p.m.w), bh, p.barColor, p.alpha);
             }
             if (!fixed) x += p.m.w + p.gapAfter;
         } else {  // caption: one-pixel outline in the taskbar's colour so it reads over the icon's lines

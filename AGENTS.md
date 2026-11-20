@@ -12,9 +12,9 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
   `ai/` branch; never rewrite upstream history. `.github/upstream-version` records the BatteryHub
   release last merged; `upstream-watch.yml` opens one issue when its daily check finds a newer
   one (never merges). After a sync, bump that file and close the issue.
-- Fork-only changes: charging / full shows as a green level-filled upright battery glyph (Segoe
-  Fluent F5F2-F5FC; horizontal E850 set on Windows 10), not upstream's
-  bolt / check (`src/widget.cpp` `BatteryGlyph`, menu *Show charging*, registry `ShowCharging`;
+- Fork-only changes: an Apple-style level bar under every battery percentage (text colour, green
+  charging / full, red low; number stays text colour), not upstream's bolt / check
+  (`src/widget.cpp` `Capsule`, menu *Show charging (green bar)*, registry `ShowCharging`;
   WLMouse Beast MAX cable `36A7:A881` added, cables share their receiver's key), and hardware
   readings after the batteries (`src/hardware.*`, pure logic in `src/hardware_model.h` with
   `tests/hardware_model_test.cpp`; `WidgetItem::tag`/`warm`; menu *Hardware on the taskbar*,
