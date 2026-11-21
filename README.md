@@ -23,8 +23,8 @@ Windows 10 or 11. If Windows shows a blue "protected your PC" box, choose **More
 - **No vendor software.** It talks to the devices directly: Logitech, Razer, SteelSeries, Corsair, HyperX,
   WLMouse, PlayStation and Xbox controllers, AirPods and Galaxy Buds, and [many more](docs/devices.md).
 - **Low-battery alerts**, with a threshold you can set per device.
-- **Hardware readings, if you want them.** CPU, GPU, RAM and VRAM usage and GPU and SSD temperatures,
-  next to the batteries. Off by default.
+- **Hardware readings, if you want them.** CPU, GPU, RAM, VRAM and disk usage, GPU and SSD temperatures,
+  CPU and GPU power and network speed, next to the batteries. Off by default.
 - **Small and quiet.** Anything you switch off is not read at all, and it pauses hardware readings while
   the screen is off.
 

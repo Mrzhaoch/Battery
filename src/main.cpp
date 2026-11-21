@@ -657,11 +657,13 @@ std::vector<TrayEntry*> OrderedEntries(bool shownOnly) {
     return list;
 }
 
-// ---- hardware readings (CPU / GPU / RAM / VRAM usage, GPU and SSD temperature) ----------------------
+// ---- hardware readings (usage, temperatures, power, network speed) ------------------------------------
 
 // Left to right on the taskbar; also the order in the menu.
-constexpr hardware::Metric kHardwareOrder[] = { hardware::Cpu, hardware::Gpu, hardware::GpuTemp,
-                                                hardware::Vram, hardware::Ram, hardware::SsdTemp };
+constexpr hardware::Metric kHardwareOrder[] = { hardware::Cpu,     hardware::CpuPower, hardware::Gpu,
+                                                hardware::GpuTemp, hardware::GpuPower, hardware::Vram,
+                                                hardware::Ram,     hardware::Disk,     hardware::SsdTemp,
+                                                hardware::NetDown, hardware::NetUp };
 
 const wchar_t* HardwareName(hardware::Metric m) {  // menu item and tooltip line
     switch (m) {
@@ -670,17 +672,27 @@ const wchar_t* HardwareName(hardware::Metric m) {  // menu item and tooltip line
         case hardware::GpuTemp: return T(L"GPU temperature");
         case hardware::Vram:    return T(L"Video memory (VRAM) usage");
         case hardware::Ram:     return T(L"RAM usage");
+        case hardware::Disk:    return T(L"Disk activity");
+        case hardware::NetDown: return T(L"Network download speed");
+        case hardware::NetUp:   return T(L"Network upload speed");
+        case hardware::CpuPower: return T(L"CPU power");
+        case hardware::GpuPower: return T(L"GPU power (share of its limit)");
         default:                return T(L"SSD temperature (Windows drive)");
     }
 }
 
 const wchar_t* HardwareTag(hardware::Metric m) {  // short text in place of a device icon
     switch (m) {
-        case hardware::Cpu:     return L"CPU";
+        case hardware::Cpu:
+        case hardware::CpuPower: return L"CPU";
         case hardware::Gpu:
         case hardware::GpuTemp: return L"GPU";
+        case hardware::GpuPower: return L"GPU PWR";
         case hardware::Vram:    return L"VRAM";
         case hardware::Ram:     return L"RAM";
+        case hardware::Disk:    return L"DISK";
+        case hardware::NetDown: return L"NET\u2193";  // arrows down / up
+        case hardware::NetUp:   return L"NET\u2191";
         default:                return L"SSD";
     }
 }
@@ -691,16 +703,19 @@ void AppendHardware(std::vector<WidgetItem>& items, std::wstring& tip) {
         int v = g_hardware.value[m];
         if (!(g_hardwareMask & hardware::Bit(m)) || v < 0) continue;
         bool temperature = m == hardware::GpuTemp || m == hardware::SsdTemp;
+        bool watts = m == hardware::CpuPower;  // GPU power is a percent of its limit
+        bool network = m == hardware::NetDown || m == hardware::NetUp;
         WidgetItem it;
         it.tag = HardwareTag(m);
-        it.text = std::to_wstring(v) + (temperature ? wchar_t(0x00B0) : L'%');  // 0x00B0: degree sign
+        if (network) it.text = hardware_model::RateText(v);  // bytes per second: "1.2M"
+        else it.text = std::to_wstring(v) + (temperature ? wchar_t(0x00B0) : watts ? L'W' : L'%');  // 0x00B0: degree sign
         if (temperature) {
             auto heat = m == hardware::GpuTemp ? hardware_model::GpuHeat(v) : hardware_model::SsdHeat(v);
             it.low = heat == hardware_model::Heat::Hot;    // red
             it.warm = heat == hardware_model::Heat::Warm;  // orange
         }
         items.push_back(it);
-        tip += std::wstring(L"\n") + HardwareName(m) + L": " + it.text + (temperature ? L"C" : L"");
+        tip += std::wstring(L"\n") + HardwareName(m) + L": " + it.text + (temperature ? L"C" : network ? L"B/s" : L"");
     }
 }
 

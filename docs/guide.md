@@ -20,11 +20,22 @@ Everything beyond the [README](../README.md): display options, alerts, installin
   Xbox, Samsung, Apple, Jabra, JBL, Cooler Master and Steam. Each color has a dark- and a light-taskbar shade. The brand
   comes from the driver that found the device, then the vendor ID, then the name; colors and rules are in
   `src/brands.cpp`. Turn it off with *Brand colors* in the menu.
-- **Hardware readings (this fork, off by default):** after the batteries, `CPU 12%  GPU 4%  GPU 44°  VRAM 6%  RAM 61%  SSD 38°`.
+- **Hardware readings (this fork, off by default):** after the batteries, for example
+  `CPU 12%  CPU 51W  GPU 4%  GPU 44°  GPU PWR 13%  VRAM 6%  RAM 61%  DISK 2%  SSD 38°  NET↓ 1.2M  NET↑ 80K`.
   *Hardware on the taskbar* in the menu switches each one on; *Refresh every* picks 1, 2 or 5 seconds (5 by
   default, the cheapest). Nothing is sampled while the display is off. The tooltip lists them by name. A temperature turns orange, then red, from 80 / 90 °C for the GPU and 65 / 75 °C
-  for the SSD. Readings come from Windows performance counters, DXGI, the graphics driver (D3DKMT, with NVIDIA's
-  `nvml.dll` as a fallback) and the storage temperature query on the drive that holds Windows: no driver, no admin
+  for the SSD.
+  - *CPU power* is the processor package's draw in watts, from its own energy meter (Windows' Energy Metering
+    Interface; recent Intel and AMD processors).
+  - *GPU power* is the graphics card's draw as a share of its power limit, as its driver reports it (13% of a
+    250 W limit is about 32 W). Watts would need NVIDIA's `nvml.dll`, which adds about 20 MB and never unloads.
+  - *Disk activity* is the busiest disk's active time, like Task Manager's.
+  - *Network download / upload speed* add up the real network adapters (Ethernet, Wi-Fi), in decimal bytes
+    per second: `K` = kB/s, `M` = MB/s, `G` = GB/s.
+
+  Readings come from Windows performance counters (GPU and VRAM usage), DXGI, the graphics driver (D3DKMT,
+  with NVIDIA's `nvml.dll` only as a GPU temperature fallback), the disks' and energy meters' own drivers, the
+  network interface table and the storage temperature query on the drive that holds Windows: no driver, no admin
   rights, nothing downloaded. A reading the PC does not provide is left out. There is no CPU temperature, because
   Windows only exposes it through a kernel driver. Taskbar widget only; nothing is read in tray-icon mode. Idea
   from [TraySense](https://github.com/DMTWEAKS/TraySense); no code was taken from it.

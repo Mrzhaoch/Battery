@@ -22,7 +22,11 @@ CONTRIBUTING.md, Makefile, build.bat and `.github/workflows` (18 Nov 2026, reche
   WLMouse Beast MAX cable `36A7:A881` added, cables share their receiver's key), and hardware
   readings after the batteries (`src/hardware.*`, pure logic in `src/hardware_model.h` with
   `tests/hardware_model_test.cpp`; `WidgetItem::tag`/`warm`; menu *Hardware on the taskbar*,
-  registry `HardwareReadings` bitmask, default 0; `HardwareRefreshSeconds` 1/2/5, default 5;
+  registry `HardwareReadings` bitmask (bits = `hardware::Metric`, new ones appended), default 0;
+  `HardwareRefreshSeconds` 1/2/5, default 5; disk activity via `IOCTL_DISK_PERFORMANCE` (handles opened per
+  sample, so USB drives can still be ejected), CPU power via the Energy Metering Interface package channels,
+  GPU power as % of its limit from D3DKMT (not NVML: nvmlInit adds ~20 MB and never unloads; Zek, 21 Nov 2026),
+  network via `GetIfTable2` hardware interfaces;
   paused while the display is off via `GUID_CONSOLE_DISPLAY_STATE`). Defaults show only batteries;
   HeadsetControl (`ReadHeadsetControl`) is off by default because it runs a program. No CPU temperature and no kernel driver, by Zek's choice
   (19 Nov 2026); TraySense (AGPL) inspired it but none of its code is used.
