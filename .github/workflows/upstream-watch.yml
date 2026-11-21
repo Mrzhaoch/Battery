@@ -48,7 +48,7 @@ jobs:
             echo "This fork last merged **$merged**; $ahead BatteryHub commits are new since then."
             echo
             echo "Nothing has been merged. To bring it in: merge \`upstream/main\` (or the \`$latest\` tag) into an"
-            echo "\`ai/\` branch, keep this fork's changes where they conflict (see AGENTS.md), let CI pass, merge"
+            echo "\`ai/\` branch, keep this fork's changes where they conflict (see CONTRIBUTING.md), let CI pass, merge"
             echo "into main, set \`.github/upstream-version\` to \`$latest\`, and close this issue."
           } > body.md
           gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
